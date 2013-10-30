@@ -1,6 +1,25 @@
 package eu.stratosphere.sopremo.base;
 
 
+import eu.stratosphere.nephele.configuration.Configuration;
+import eu.stratosphere.nephele.template.GenericInputSplit;
+import eu.stratosphere.pact.common.contract.GenericDataSource;
+import eu.stratosphere.pact.common.io.statistics.BaseStatistics;
+import eu.stratosphere.pact.common.plan.PactModule;
+import eu.stratosphere.pact.generic.io.InputFormat;
+import eu.stratosphere.sopremo.EvaluationContext;
+import eu.stratosphere.sopremo.SopremoEnvironment;
+import eu.stratosphere.sopremo.expressions.EvaluationExpression;
+import eu.stratosphere.sopremo.io.JsonParseException;
+import eu.stratosphere.sopremo.io.JsonParser;
+import eu.stratosphere.sopremo.operator.ElementaryOperator;
+import eu.stratosphere.sopremo.operator.InputCardinality;
+import eu.stratosphere.sopremo.operator.Name;
+import eu.stratosphere.sopremo.operator.Property;
+import eu.stratosphere.sopremo.pact.SopremoUtil;
+import eu.stratosphere.sopremo.serialization.SopremoRecord;
+import eu.stratosphere.sopremo.serialization.SopremoRecordLayout;
+import eu.stratosphere.sopremo.type.*;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -17,32 +36,6 @@ import java.util.Map.Entry;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import com.google.common.collect.Iterators;
-
-import eu.stratosphere.nephele.configuration.Configuration;
-import eu.stratosphere.nephele.template.GenericInputSplit;
-import eu.stratosphere.pact.common.contract.GenericDataSource;
-import eu.stratosphere.pact.common.io.GenericInputFormat;
-import eu.stratosphere.pact.common.plan.PactModule;
-import eu.stratosphere.pact.common.type.PactRecord;
-import eu.stratosphere.sopremo.EvaluationContext;
-import eu.stratosphere.sopremo.expressions.EvaluationExpression;
-import eu.stratosphere.sopremo.io.JsonParseException;
-import eu.stratosphere.sopremo.io.JsonParser;
-import eu.stratosphere.sopremo.operator.ElementaryOperator;
-import eu.stratosphere.sopremo.operator.InputCardinality;
-import eu.stratosphere.sopremo.operator.Name;
-import eu.stratosphere.sopremo.operator.Property;
-import eu.stratosphere.sopremo.pact.SopremoUtil;
-import eu.stratosphere.sopremo.serialization.Schema;
-import eu.stratosphere.sopremo.type.ArrayNode;
-import eu.stratosphere.sopremo.type.IArrayNode;
-import eu.stratosphere.sopremo.type.IJsonNode;
-import eu.stratosphere.sopremo.type.IObjectNode;
-import eu.stratosphere.sopremo.type.NullNode;
-import eu.stratosphere.sopremo.type.ObjectNode;
-import eu.stratosphere.sopremo.type.TextNode;
-
 @Name(verb = "datamarketaccess")
 @InputCardinality(0)
 public class DataMarketAccess extends ElementaryOperator<DataMarketAccess> {
@@ -54,52 +47,44 @@ public class DataMarketAccess extends ElementaryOperator<DataMarketAccess> {
 	private String  urlParameterNodeString=null;
 	private String dmApiKeyString = null;
 
-	public static class DataMarketInputFormat extends GenericInputFormat {
+	public static class DataMarketInputFormat implements InputFormat<SopremoRecord, GenericInputSplit> {
 
 		private EvaluationContext context;
 
-		/**
-		 * Schema loaded from config.
-		 *
-		 */
-		private Schema schema;
-
 		private String urlParameter;
-		
+
 		private String apiKey;
 
 		private Iterator<IJsonNode> nodeIterator;
 
 		@Override
 		public void configure(Configuration parameters) {
-			super.configure(parameters);
-			this.context = (EvaluationContext) SopremoUtil.getObject(
-					parameters, SopremoUtil.CONTEXT, null);
-			this.schema = this.context.getOutputSchema(0);
-			urlParameter = (String) SopremoUtil.getObject(parameters,
-					DM_URL_PARAMETER, null);
-			apiKey = (String) SopremoUtil.getObject(parameters,
-					DM_API_KEY_PARAMETER, null);
+			this.context = SopremoUtil.getEvaluationContext(parameters);
+            SopremoEnvironment.getInstance().setEvaluationContext(context);
+			urlParameter = (String) SopremoUtil.getObject(parameters, DM_URL_PARAMETER, null);
+			apiKey = (String) SopremoUtil.getObject(parameters, DM_API_KEY_PARAMETER, null);
 		}
 
 		/*
 		 * (non-Javadoc)
-		 * 
+		 *
 		 * @see
 		 * eu.stratosphere.pact.common.io.GenericInputFormat#createInputSplits
 		 * (int)
 		 */
 		@Override
-		public GenericInputSplit[] createInputSplits(final int minNumSplits)
-				throws IOException {
-
-			return super.createInputSplits(minNumSplits);
+		public GenericInputSplit[] createInputSplits(final int minNumSplits) throws IOException {
+            GenericInputSplit[] splits = new GenericInputSplit[minNumSplits];
+            for (int i = 0; i < minNumSplits; i++) {
+                splits[i] = new GenericInputSplit(i);
+            }
+            return splits;
 		}
 
 		/**
 		 * Advanced input Split generation, requires to register
 		 * DataMarketInputSplit with Nepeheles kryo instances
-		 * 
+		 *
 		 * @param minNumSplits
 		 * @return
 		 */
@@ -110,7 +95,7 @@ public class DataMarketAccess extends ElementaryOperator<DataMarketAccess> {
 			// this assumes that DM does not return too much data
 
 			String response = fetchDataMarketResponse(this.urlParameter, apiKey);
-			
+
 			// convert record format
 			ArrayNode<IJsonNode> records = convertDataMarketResponse(response);
 
@@ -170,7 +155,7 @@ public class DataMarketAccess extends ElementaryOperator<DataMarketAccess> {
 
 		/*
 		 * (non-Javadoc)
-		 * 
+		 *
 		 * @see
 		 * eu.stratosphere.pact.common.io.GenericInputFormat#getInputSplitType()
 		 */
@@ -179,27 +164,30 @@ public class DataMarketAccess extends ElementaryOperator<DataMarketAccess> {
 			return GenericInputSplit.class;
 		}
 
-		/*
-		 * (non-Javadoc)
-		 * 
-		 * @see
-		 * eu.stratosphere.pact.common.io.GenericInputFormat#open(eu.stratosphere
-		 * .nephele.template.GenericInputSplit)
-		 */
+        @Override
+        public BaseStatistics getStatistics(BaseStatistics baseStatistics) throws IOException {
+            return null;
+        }
+
+        /*
+                 * (non-Javadoc)
+                 *
+                 * @see
+                 * eu.stratosphere.pact.common.io.GenericInputFormat#open(eu.stratosphere
+                 * .nephele.template.GenericInputSplit)
+                 */
 		@Override
 		public void open(final GenericInputSplit split) throws IOException {
-			super.open(split);
-			
 			if (split.getSplitNumber() == 0) {
 				String response = fetchDataMarketResponse(this.urlParameter, apiKey);
 				// convert record format
 				ArrayNode<IJsonNode> records = convertDataMarketResponse(response);
-				
+
 				this.nodeIterator = records.iterator();
 			} else {
 				this.nodeIterator = null;
 			}
-			
+
 		}
 
 		@Override
@@ -210,15 +198,15 @@ public class DataMarketAccess extends ElementaryOperator<DataMarketAccess> {
 			return !this.nodeIterator.hasNext();
 		}
 
-		@Override
-		public boolean nextRecord(final PactRecord record) throws IOException {
-			if (this.reachedEnd())
-				throw new IOException("End of input split is reached");
+        @Override
+        public boolean nextRecord(final SopremoRecord record) throws IOException {
+            if (this.reachedEnd())
+                throw new IOException("End of input split is reached");
 
-			final IJsonNode value = this.nodeIterator.next();
-			this.schema.jsonToRecord(value, record);
-			return true;
-		}
+            final IJsonNode value = this.nodeIterator.next();
+            record.setNode(value);
+            return true;
+        }
 
 		protected static ArrayNode<IJsonNode> convertDataMarketResponse(
 				String jsonString) {
@@ -296,18 +284,23 @@ public class DataMarketAccess extends ElementaryOperator<DataMarketAccess> {
 			}
 			return new TextNode(time);
 		}
+
+        @Override
+        public void close() throws IOException {
+            // TODO Auto-generated method stub
+        }
 	}
 
 	/**
 	 * CURRENTLY UNUSED! This type needs to be registered with Nephele...
 	 * registration order is important, so this needs to be done during
 	 * initialization of nephele in a reproducible order!
-	 * 
+	 *
 	 * Input split for DataMarketAccessInputFormat. In addition to the number
 	 * the split also contains the actual data, that each split should return.
 	 * This way, the dm web API is only queried once and we still can distribute
 	 * the result across the required number of nodes.
-	 * 
+	 *
 	 * @author mleich
 	 */
 	public static class DataMarketInputSplit extends GenericInputSplit {
@@ -328,19 +321,19 @@ public class DataMarketAccess extends ElementaryOperator<DataMarketAccess> {
 		}
 	}
 
-	
-	
-	
+
+
+
 
    protected static class DatasetParser {
 
 	private Map<String,IArrayNode<IJsonNode>> dimensions = new HashMap<String,IArrayNode<IJsonNode>> ();
-	
+
      public String parseDS(String dscontent) {
-	
+
 		String finalDS="";
-		
-		// parse content from json file, multiple ds is allowed	
+
+		// parse content from json file, multiple ds is allowed
 		JsonParser parser = new JsonParser(dscontent);
 		IArrayNode<IObjectNode>datasets = null;
 	    try {
@@ -351,58 +344,58 @@ public class DataMarketAccess extends ElementaryOperator<DataMarketAccess> {
 		}
   	     //call each dataset like: 12rb!e4s=7a:e4t=5	 or 17tm!kqc=p
 	    for (int i = 0; i < datasets.size(); i++) {
-	    	 
+
 	    	String di="";
-	    	
+
 	    	IJsonNode ds_id=datasets.get(i).get("ds_id");
 	    	String one_ds_id=ds_id.toString();
-	        if (!datasets.get(i).get("dimension").isMissing()) {
+	        if (!(datasets.get(i).get("dimension") instanceof MissingNode)) {
 	        	IObjectNode dimensions=(IObjectNode) datasets.get(i).get ("dimension");
 	        	Iterator<Entry<String, IJsonNode>> iterator=dimensions.iterator();
 		        while(iterator.hasNext()){
-		        	Entry<String, IJsonNode> e=iterator.next();  
+		        	Entry<String, IJsonNode> e=iterator.next();
 		           	TextNode eachDim=(TextNode)checkDimension(ds_id,e.getKey(),e.getValue());
-				   	 
+
 		  	    	di+=eachDim+":";	    	//   System.out.println(di);   //e4s=7a:e4t=5:
-		   	    	one_ds_id+="!"+di.substring(0, di.lastIndexOf(":"));  		      
+		   	    	one_ds_id+="!"+di.substring(0, di.lastIndexOf(":"));
 		       	}
 	        }
-	        	 
+
 	       	finalDS+=one_ds_id+"/";
-     }  
+     }
 	  // set up the whole (multi-)dataset together
 	    finalDS=finalDS.substring(0, finalDS.lastIndexOf("/"));
-	     
-		return finalDS;	
-	}	
+
+		return finalDS;
+	}
 	/*
 	 * Transfer each dimension under its ds_id
-	 * return a form for datamarket api 
+	 * return a form for datamarket api
 	 * {e4s: 7a}   ==> e4s=7a
 	 */
     public TextNode checkDimension(IJsonNode ds, String id, IJsonNode value) {
     	 IArrayNode<IJsonNode> dimArray = dimensions.get (ds.toString());
     	 TextNode  tmp = null;
     	 if (dimArray == null) {
-    		 // fetch dimensions from DataMarket          	      		
+    		 // fetch dimensions from DataMarket
       		    BufferedReader reader = null;
       		    String dsData="";
-      		    try {     		       
+      		    try {
       	            URL url = new URL("http://datamarket.com/api/v1/info.json?ds="+ds.toString());
-      		        reader = new BufferedReader(new InputStreamReader(url.openStream()));   		        
-      		        StringBuffer buffer = new StringBuffer();	      
+      		        reader = new BufferedReader(new InputStreamReader(url.openStream()));
+      		        StringBuffer buffer = new StringBuffer();
       		        int read;
       		        char[] chars = new char[1024];
-      		       
+
       		        while ((read = reader.read(chars)) != -1)
-      		          buffer.append(chars, 0, read); 
+      		          buffer.append(chars, 0, read);
       		          dsData=buffer.toString();
-         
+
       		    } catch (Exception e) {
       				// TODO Auto-generated catch block
       				e.printStackTrace();
       			}
-      	
+
     			// remove Data Market API call around content
     			Pattern pattern = Pattern.compile("jsonDataMarketApi\\((.+)\\)", Pattern.DOTALL);
     			Matcher matcher = pattern.matcher(dsData);
@@ -411,47 +404,47 @@ public class DataMarketAccess extends ElementaryOperator<DataMarketAccess> {
     			}
     			String jsoncontent = matcher.group(1);
     			JsonParser parser = new JsonParser(jsoncontent);
-         		
-    	 		IArrayNode<IObjectNode> dims = null;   	
+
+    	 		IArrayNode<IObjectNode> dims = null;
       		try {
       			dims =(IArrayNode<IObjectNode>) parser.readValueAsTree();
-      	    	
+
       		} catch (JsonParseException e) {
       			// TODO Auto-generated catch block
       			e.printStackTrace();
-      		}	        	      		
-      		//call each dimension values	  
+      		}
+      		//call each dimension values
       	    //values|subValues::  [{id: 6a, title: Eastern Europe}, {id: 3e, iso3166: PT, title: Portugal},.....
       		//subValues.get(0)::{id: 6a, title: Eastern Europe}
       	    	dimArray =(IArrayNode<IJsonNode>) dims.get(0).get("dimensions");
-    		    this.dimensions.put(ds.toString(), dimArray); 
+    		    this.dimensions.put(ds.toString(), dimArray);
     	 }
-    		
+
      		for (int i = 0; i < dimArray.size(); i++) {
      	    	IJsonNode d_id_key=((IObjectNode) dimArray.get(i)).get("id");
      	    	IJsonNode d_id_value=((IObjectNode) dimArray.get(i)).get("title");
      	    	IJsonNode values=((IObjectNode) dimArray.get(i)).get("values");
      	    	IArrayNode<IJsonNode> valueArray=(IArrayNode<IJsonNode>)values;
-     	    	
+
      	    	if(id.equals(d_id_value.toString())){
      	    		id= d_id_key.toString();
-     	    	}   	    	
+     	    	}
      	    	 for (int j = 0; j < valueArray.size(); j++) {
-     	    		 IJsonNode keyValue=((IObjectNode) valueArray.get(j)).get("id"); 
-     	    		 IJsonNode valueValue=((IObjectNode) valueArray.get(j)).get("title"); 
-     	    		
+     	    		 IJsonNode keyValue=((IObjectNode) valueArray.get(j)).get("id");
+     	    		 IJsonNode valueValue=((IObjectNode) valueArray.get(j)).get("title");
+
      	    		 if(value.equals(valueValue)){
-     	    			value=keyValue;     	    	
-     	    		 }     	    		 
-     	    	//set one dimension	     	         	         	  
+     	    			value=keyValue;
+     	    		 }
+     	    	//set one dimension
     	        tmp=new TextNode(id+"="+value.toString());
      	    	 }
-     	   }     		     	 
-     		return tmp;	       	
-     	}	
+     	   }
+     		return tmp;
+     	}
 }
-	
-	
+
+
 	@Override
 	public int hashCode() {
 		final int prime = 37;
@@ -461,20 +454,15 @@ public class DataMarketAccess extends ElementaryOperator<DataMarketAccess> {
 	}
 
 	@Override
-	public PactModule asPactModule(EvaluationContext context) {
-		context.setInputsAndOutputs(0, 1);
-
+	public PactModule asPactModule(EvaluationContext context, SopremoRecordLayout layout) {
 		GenericDataSource<?> contract = new GenericDataSource<DataMarketInputFormat>(
-				DataMarketInputFormat.class, String.format("DataMarket %s",
-						urlParameterNodeString));
+				DataMarketInputFormat.class, String.format("DataMarket %s", urlParameterNodeString));
 
 		final PactModule pactModule = new PactModule(0, 1);
-		SopremoUtil.setObject(contract.getParameters(), SopremoUtil.CONTEXT,
-				context);
-		SopremoUtil.setObject(contract.getParameters(), DM_URL_PARAMETER,
-				urlParameterNodeString);
-		SopremoUtil.setObject(contract.getParameters(), DM_API_KEY_PARAMETER,
-				dmApiKeyString);
+        SopremoUtil.setEvaluationContext(contract.getParameters(), context);
+        SopremoUtil.setLayout(contract.getParameters(), layout);
+		SopremoUtil.setObject(contract.getParameters(), DM_URL_PARAMETER, urlParameterNodeString);
+		SopremoUtil.setObject(contract.getParameters(), DM_API_KEY_PARAMETER, dmApiKeyString);
 		pactModule.getOutput(0).setInput(contract);
 		return pactModule;
 	}
@@ -485,14 +473,14 @@ public class DataMarketAccess extends ElementaryOperator<DataMarketAccess> {
 		if (value == null)
 			throw new NullPointerException("value expression must not be null");
 		urlParameterNode = value.evaluate(NullNode.getInstance());
-		
+
 		DatasetParser ds = new DatasetParser();
 		urlParameterNodeString=ds.parseDS(urlParameterNode.toString());
-		
+
 //		System.out.println("set urlParameter expression "
 //				+ urlParameterNode.toString());
 	}
-	
+
 	@Property(preferred = false)
 	@Name(noun = "key")
 	public void setKeyParameter(EvaluationExpression value) {
@@ -501,5 +489,5 @@ public class DataMarketAccess extends ElementaryOperator<DataMarketAccess> {
 		IJsonNode node = value.evaluate(NullNode.getInstance());
 		dmApiKeyString = node.toString();
 	}
-	
+
 }

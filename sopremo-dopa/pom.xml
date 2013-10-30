@@ -8,9 +8,24 @@
 		<dependency>
 			<groupId>eu.stratosphere</groupId>
 			<artifactId>sopremo-common</artifactId>
-			<version>0.3</version>
+			<version>0.4-SNAPSHOT</version>
 		</dependency>
+        <dependency>
+            <groupId>eu.stratosphere</groupId>
+            <artifactId>pact-hbase</artifactId>
+            <version>0.4-hadoop2-SNAPSHOT</version>
+        </dependency>
 	</dependencies>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>eu.stratosphere</groupId>
+                <artifactId>pact-common</artifactId>
+                <version>0.4-hadoop2-SNAPSHOT</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
 	<build>
 		<plugins>
