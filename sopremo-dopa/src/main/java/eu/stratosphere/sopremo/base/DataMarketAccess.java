@@ -40,20 +40,28 @@ import java.util.regex.Pattern;
 @InputCardinality(0)
 public class DataMarketAccess extends ElementaryOperator<DataMarketAccess> {
 
-	protected static final String DM_URL_PARAMETER = "ser_dm_url_parameter";
-	protected static final String DM_API_KEY_PARAMETER = "ser_api_key_parameter";
+    protected static final String DM_URL_PARAMETER = "ser_dm_url_parameter";
+    protected static final String DM_API_KEY_PARAMETER = "ser_api_key_parameter";
+    protected static final String DM_MIN_DATE = "ser_dm_mindate";
+    protected static final String DM_MAX_DATE = "ser_dm_maxdate";
 
-	private IJsonNode urlParameterNode = null;
-	private String  urlParameterNodeString=null;
-	private String dmApiKeyString = null;
+    private IJsonNode urlParameterNode = null;
+    private String  urlParameterNodeString=null;
+    private String dmApiKeyString = null;
+    private String mindate = null;
+    private String maxdate = null;
 
 	public static class DataMarketInputFormat implements InputFormat<SopremoRecord, GenericInputSplit> {
 
 		private EvaluationContext context;
 
-		private String urlParameter;
+        private String urlParameter;
 
-		private String apiKey;
+        private String apiKey;
+
+        private String minDate;
+
+        private String maxDate;
 
 		private Iterator<IJsonNode> nodeIterator;
 
@@ -61,8 +69,10 @@ public class DataMarketAccess extends ElementaryOperator<DataMarketAccess> {
 		public void configure(Configuration parameters) {
 			this.context = SopremoUtil.getEvaluationContext(parameters);
             SopremoEnvironment.getInstance().setEvaluationContext(context);
-			urlParameter = (String) SopremoUtil.getObject(parameters, DM_URL_PARAMETER, null);
-			apiKey = (String) SopremoUtil.getObject(parameters, DM_API_KEY_PARAMETER, null);
+			urlParameter = parameters.getString(DM_URL_PARAMETER, null);
+			apiKey = parameters.getString(DM_API_KEY_PARAMETER, null);
+            minDate = parameters.getString(DM_MIN_DATE, null);
+            maxDate = parameters.getString(DM_MAX_DATE, null);
 		}
 
 		/*
@@ -133,7 +143,12 @@ public class DataMarketAccess extends ElementaryOperator<DataMarketAccess> {
 				String urlstring = "http://datamarket.com/api/v1/series.json?ds=" + urlParameter;
 				if (apiKey != null) {
 					urlstring += "&secret_key=" + apiKey;
-				}
+				}if (minDate != null) {
+                    urlstring += "&mindate=" + minDate;
+                }
+                if (maxDate != null) {
+                    urlstring += "&maxdate=" + maxDate;
+                }
 				URL url = new URL(urlstring);
 				reader = new BufferedReader(new InputStreamReader(
 						url.openStream()));
@@ -461,8 +476,10 @@ public class DataMarketAccess extends ElementaryOperator<DataMarketAccess> {
 		final PactModule pactModule = new PactModule(0, 1);
         SopremoUtil.setEvaluationContext(contract.getParameters(), context);
         SopremoUtil.setLayout(contract.getParameters(), layout);
-		SopremoUtil.setObject(contract.getParameters(), DM_URL_PARAMETER, urlParameterNodeString);
-		SopremoUtil.setObject(contract.getParameters(), DM_API_KEY_PARAMETER, dmApiKeyString);
+        contract.getParameters().setString(DM_URL_PARAMETER, urlParameterNodeString);
+        contract.getParameters().setString(DM_API_KEY_PARAMETER, dmApiKeyString);
+        contract.getParameters().setString(DM_MAX_DATE, maxdate);
+        contract.getParameters().setString(DM_MIN_DATE, mindate);
 		pactModule.getOutput(0).setInput(contract);
 		return pactModule;
 	}
@@ -489,5 +506,23 @@ public class DataMarketAccess extends ElementaryOperator<DataMarketAccess> {
 		IJsonNode node = value.evaluate(NullNode.getInstance());
 		dmApiKeyString = node.toString();
 	}
+
+    @Property(preferred = false)
+    @Name(noun = "mindate")
+    public void setMinDate(EvaluationExpression value) {
+        if (value == null)
+            throw new NullPointerException("value expression must not be null");
+        IJsonNode node = value.evaluate(NullNode.getInstance());
+        mindate = node.toString();
+    }
+
+    @Property(preferred = false)
+    @Name(noun = "maxdate")
+    public void setMaxDate(EvaluationExpression value) {
+        if (value == null)
+            throw new NullPointerException("value expression must not be null");
+        IJsonNode node = value.evaluate(NullNode.getInstance());
+        maxdate = node.toString();
+    }
 
 }
