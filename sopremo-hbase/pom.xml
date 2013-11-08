@@ -6,7 +6,7 @@
   	<parent>
 		<artifactId>sopremo-package</artifactId>
 		<groupId>eu.stratosphere</groupId>
-		<version>0.3</version>
+		<version>0.4-hadoop2-SNAPSHOT</version>
 		<relativePath>..</relativePath>
 	</parent>
   <dependencies>
