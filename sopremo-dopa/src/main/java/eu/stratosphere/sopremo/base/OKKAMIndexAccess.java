@@ -93,7 +93,8 @@ public class OKKAMIndexAccess extends ElementaryOperator<OKKAMIndexAccess> {
                     // TODO implement exception handling
                 }
                 if (ret.getError() == null) {
-                    docIds = ret.getDocIds();
+                    //FIXME: handle garbage entities 
+                	docIds = ret.getDocIds();
                     iterator = docIds.iterator();
                 }
 
