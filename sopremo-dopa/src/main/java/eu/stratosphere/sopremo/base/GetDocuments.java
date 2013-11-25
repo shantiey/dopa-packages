@@ -36,13 +36,28 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 		private static final long serialVersionUID = 3885278940930026634L;
 		
 		private EvaluationContext context;
+		private String identifier;
+		private String pool;
+		
+		private String document;
 
 		@Override
 		public void configure(Configuration parameters) {
 			this.context = SopremoUtil.getEvaluationContext(parameters);
             SopremoEnvironment.getInstance().setEvaluationContext(context);
-			// TODO Auto-generated method stub
-			
+            identifier = parameters.getString(DOCUMENT_IDENTIFIERS, null);
+            pool = parameters.getString(DATA_POOL, null);
+		}
+		
+		// TODO: implement actual document retrieval (DataMarket)
+		private String getDMDocument(String identifier) {
+			DataMarketAccess dmAccess = new DataMarketAccess();
+			return identifier;
+		}
+		
+		// TODO: implement actual document retrieval (IMR)
+		private String getIMRDocument(String identifier) {
+			return identifier;
 		}
 
 		@Override
@@ -53,22 +68,26 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 		}
 
 		@Override
-		public GenericInputSplit[] createInputSplits(int minNumSplits)
-				throws IOException {
-			// TODO Auto-generated method stub
-			return null;
+		public GenericInputSplit[] createInputSplits(int minNumSplits) throws IOException {
+			GenericInputSplit[] splits = new GenericInputSplit[minNumSplits];
+            for (int i = 0; i < minNumSplits; i++) {
+                splits[i] = new GenericInputSplit(i);
+            }
+            return splits;
 		}
 
 		@Override
 		public Class<? extends GenericInputSplit> getInputSplitType() {
-			// TODO Auto-generated method stub
-			return null;
+			return GenericInputSplit.class;
 		}
 
 		@Override
 		public void open(GenericInputSplit split) throws IOException {
-			// TODO Auto-generated method stub
-			
+			if (this.pool.matches("DM")) {
+				this.document = getDMDocument(this.identifier);
+			} else if (this.pool.matches("IMR")) {
+				this.document = getIMRDocument(this.identifier);
+			}
 		}
 
 		@Override
@@ -122,7 +141,7 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 		if (value == null) {
 			throw new NullPointerException("value expression must not be null");
 		} else {
-			if (value.toString() == "DM" || value.toString() == "IMR") {
+			if (value.toString().matches("DM") || value.toString().matches("IMR")) {
 				data_pool = value.toString();
 			} else {
 				//TODO: throw some exception for wrong expression usage (after 'on' must follow 'DM' or 'IMR')
@@ -133,7 +152,7 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 	@Property(preferred = false)
 	@Name(noun = "with")
 	public void setAdditionalMetaData(EvaluationExpression value) {
-		//TODO: evaluate given json file for additional metadata
+		//TODO: evaluate committed json file for additional metadata
 	}
 
 }
