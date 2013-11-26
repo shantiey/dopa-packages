@@ -1,6 +1,7 @@
 package eu.stratosphere.sopremo.base;
 
 import java.io.IOException;
+import java.util.Iterator;
 
 import eu.stratosphere.nephele.configuration.Configuration;
 import eu.stratosphere.nephele.template.GenericInputSplit;
@@ -18,6 +19,8 @@ import eu.stratosphere.sopremo.operator.Property;
 import eu.stratosphere.sopremo.pact.SopremoUtil;
 import eu.stratosphere.sopremo.serialization.SopremoRecord;
 import eu.stratosphere.sopremo.serialization.SopremoRecordLayout;
+import eu.stratosphere.sopremo.type.ArrayNode;
+import eu.stratosphere.sopremo.type.IJsonNode;
 import eu.stratosphere.sopremo.type.NullNode;
 
 @Name(verb = "getDocuments")
@@ -39,7 +42,7 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 		private String identifier;
 		private String pool;
 		
-		private String document;
+		private Iterator<IJsonNode> nodeIterator;
 
 		@Override
 		public void configure(Configuration parameters) {
@@ -49,15 +52,15 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
             pool = parameters.getString(DATA_POOL, null);
 		}
 		
-		// TODO: implement actual document retrieval (DataMarket)
 		private String getDMDocument(String identifier) {
+			// TODO: implement actual document retrieval (DataMarket)
 			DataMarketAccess dmAccess = new DataMarketAccess();
-			return identifier;
+			return null;
 		}
 		
-		// TODO: implement actual document retrieval (IMR)
 		private String getIMRDocument(String identifier) {
-			return identifier;
+			// TODO: implement actual document retrieval (IMR)
+			return null;
 		}
 
 		@Override
@@ -83,29 +86,50 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 
 		@Override
 		public void open(GenericInputSplit split) throws IOException {
-			if (this.pool.matches("DM")) {
-				this.document = getDMDocument(this.identifier);
-			} else if (this.pool.matches("IMR")) {
-				this.document = getIMRDocument(this.identifier);
+			if (split.getSplitNumber() == 0) {
+				
+				String response = null;
+				if (this.pool.matches("DM")) {
+					response = getDMDocument(this.identifier);
+				} else if (this.pool.matches("IMR")) {
+					response = getIMRDocument(this.identifier);
+				}
+				ArrayNode<IJsonNode> records = convertRespone(response);
+				
+				this.nodeIterator = records.iterator();
+				
+			} else {
+				this.nodeIterator = null;
 			}
+			
+		}
+
+		private ArrayNode<IJsonNode> convertRespone(String response) {
+			// TODO convert the String responses to IJsonNodes
+			return null;
 		}
 
 		@Override
 		public boolean reachedEnd() throws IOException {
-			// TODO Auto-generated method stub
-			return false;
+			if (nodeIterator == null) {
+				return true;
+			}
+			return !this.nodeIterator.hasNext();
 		}
 
 		@Override
 		public boolean nextRecord(SopremoRecord record) throws IOException {
-			// TODO Auto-generated method stub
-			return false;
+			if (this.reachedEnd())
+                throw new IOException("End of input split is reached");
+
+            final IJsonNode value = this.nodeIterator.next();
+            record.setNode(value);
+            return true;
 		}
 
 		@Override
 		public void close() throws IOException {
-			// TODO Auto-generated method stub
-			
+			// do nothing
 		}
 		
 	}
@@ -113,7 +137,6 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 	@Override
 	public PactModule asPactModule(EvaluationContext context, SopremoRecordLayout layout) {
 		
-		//FIXME: build suitable contract for getDocuments	
 		GenericDataSource<?> contract = new GenericDataSource<GetDocumentsInputFormat>(
 				GetDocumentsInputFormat.class, String.format("GetDocuments %s", document_identifiers));
 	
