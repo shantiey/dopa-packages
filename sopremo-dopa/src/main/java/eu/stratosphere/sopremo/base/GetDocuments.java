@@ -55,38 +55,67 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 		@Override
 		public void map(PactRecord record, Collector<PactRecord> out)
 				throws Exception {
+			// only for data pool = IMR
 			
 			//TODO: determine if record is a single item or a list
+			for(int k=0; k<record.getNumFields();k++){
+				
+				PactString url = record.getField(0, PactString.class);			
+				out.collect(buildPactRecord(url));
+			}
 			
-			// data pool = IMR
+
+		}
+		
+		
+		private PactRecord buildPactRecord(PactString url){
+			
+		
+			
 			conf.addResource(new Path("file:///0/platform-strato/hbase-site_imr.xml"));
+			
 			//TODO: find out what the tablename is
 			HTable table = new HTable(conf, tablename);
 				
+				//the "row's" are the url's 
+				byte[] row = url.toString().getBytes();
+				
+	            Get get = new Get(row);
+	            get.addColumn(BASELINE_FAMILY, TITLE_QUALIFIER);
+	            get.addColumn(BASELINE_FAMILY, TEXT_QUALIFIER);
+	            get.addColumn(META_FAMILY, LANGUAGE_QUALIFIER);
+	            get.addColumn(META_FAMILY, MIME_QUALIFIER);
+	            get.addColumn(META_FAMILY, CRAWLID_QUALIFIER);
+	            
+	            //get the information/results from the hBase table
+	            Result res = table.get(get);
+	          
+	            //extract all the data and put it in an object
+	            byte[] value = res.getRow();
+	
+	            // convert to String
+	            String content = new String (value, Charset.forName("UTF-8"));
+	
+	            
+	            //TODO handle content
+	            
+	            
+	            
+	            PactRecord out = new PactRecord();
+	            
+	            // TODO build PactRecord
+	            
+	            
+	            out.setField(0, this.identifier);
+				out.setField(1, this.content);
+				
+				return out;
 			
-            Get get = new Get(row);
-            get.addColumn(BASELINE_FAMILY, TITLE_QUALIFIER);
-            get.addColumn(BASELINE_FAMILY, TEXT_QUALIFIER);
-            get.addColumn(META_FAMILY, LANGUAGE_QUALIFIER);
-            get.addColumn(META_FAMILY, MIME_QUALIFIER);
-            get.addColumn(META_FAMILY, CRAWLID_QUALIFIER);
-            
-            Result res = table.get(get);
-            
-            //extract ALL the data and put it in an object
-            byte[] value = res.getRow();
-
-            // convert to String
-            String testString = new String (value, Charset.forName("UTF-8"));
-
-			this.out.setField(0, this.identifier);
-			this.out.setField(1, this.content);
-			
-			out.collect(this.out);
-
 		}
-
+		
 	}
+		
+		
 	
 	// unchanged method from super-class
 	//TODO: add parameter for data pool
@@ -118,3 +147,4 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 	}
 	
 }
+
