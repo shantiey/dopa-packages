@@ -9,6 +9,7 @@ import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
+import org.codehaus.jackson.JsonNode;
 
 import eu.stratosphere.pact.common.IdentityMap;
 import eu.stratosphere.pact.common.contract.MapContract;
@@ -21,8 +22,10 @@ import eu.stratosphere.pact.generic.contract.Contract;
 import eu.stratosphere.pact.generic.contract.ContractUtil;
 import eu.stratosphere.sopremo.EvaluationContext;
 import eu.stratosphere.sopremo.expressions.ConstantExpression;
+import eu.stratosphere.sopremo.io.JsonParser;
 import eu.stratosphere.sopremo.operator.ElementaryOperator;
 import eu.stratosphere.sopremo.serialization.SopremoRecordLayout;
+import eu.stratosphere.sopremo.type.IJsonNode;
 import eu.stratosphere.util.IdentityList;
 
 public class GetDocuments extends ElementaryOperator<GetDocuments> {
@@ -56,6 +59,9 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 		public void map(PactRecord record, Collector<PactRecord> out)
 				throws Exception {
 			// only for data pool = IMR
+			
+			JsonParser jsonParser = new JsonParser(record.getField(0, PactString.class).getValue());
+			IJsonNode input = jsonParser.readValueAsTree();
 			
 			//TODO: determine if record is a single item or a list
 			for(int k=0; k<record.getNumFields();k++){
