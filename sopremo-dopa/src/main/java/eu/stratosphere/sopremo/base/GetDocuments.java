@@ -68,52 +68,70 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 		}
 		
 		
+		/**
+		 * Build a PactRecord out of the given url. The first entry of the new PactRecord is the url, the second is the content,...
+		 * @param url the url for the new PactRecord
+		 * @return return the new PactRecord
+		 */
 		private PactRecord buildPactRecord(PactString url){
-			
-		
 			
 			conf.addResource(new Path("file:///0/platform-strato/hbase-site_imr.xml"));
 			
 			//TODO: find out what the tablename is
 			HTable table = new HTable(conf, tablename);
 				
-				//the "row's" are the url's 
-				byte[] row = url.toString().getBytes();
-				
-	            Get get = new Get(row);
-	            get.addColumn(BASELINE_FAMILY, TITLE_QUALIFIER);
-	            get.addColumn(BASELINE_FAMILY, TEXT_QUALIFIER);
-	            get.addColumn(META_FAMILY, LANGUAGE_QUALIFIER);
-	            get.addColumn(META_FAMILY, MIME_QUALIFIER);
-	            get.addColumn(META_FAMILY, CRAWLID_QUALIFIER);
-	            
-	            //get the information/results from the hBase table
-	            Result res = table.get(get);
-	          
-	            //extract all the data and put it in an object
-	            byte[] value = res.getRow();
-	
-	            // convert to String
-	            String content = new String (value, Charset.forName("UTF-8"));
-	
-	            
-	            //TODO handle content
-	            
-	            
-	            
-	            PactRecord out = new PactRecord();
-	            
-	            // TODO build PactRecord
-	            
-	            
-	            out.setField(0, this.identifier);
-				out.setField(1, this.content);
-				
-				return out;
+			//the "row's" are the url's 
+			byte[] row = url.toString().getBytes();
 			
-		}
+            Get get = new Get(row);
+	        get.addColumn(BASELINE_FAMILY, TITLE_QUALIFIER);
+	        get.addColumn(BASELINE_FAMILY, TEXT_QUALIFIER);
+            get.addColumn(META_FAMILY, LANGUAGE_QUALIFIER);
+            get.addColumn(META_FAMILY, MIME_QUALIFIER);
+	        get.addColumn(META_FAMILY, CRAWLID_QUALIFIER);
+	            
+	        //get the information/results from the hBase table
+	        Result res = table.get(get);
+	          
+	        //extract all the data and put it in an object
+	        byte[] value0 = res.getValue(BASELINE_FAMILY, TITLE_QUALIFIER);
+	        byte[] value1 = res.getValue(BASELINE_FAMILY, TEXT_QUALIFIER);
+	        byte[] value2 = res.getValue(META_FAMILY, LANGUAGE_QUALIFIER);
+	        byte[] value3 = res.getValue(META_FAMILY, MIME_QUALIFIER);
+	        byte[] value4 = res.getValue(META_FAMILY, CRAWLID_QUALIFIER);
+	
+	        // convert to String
+            String title = new String (value0, Charset.forName("UTF-8"));
+            String text = new String (value1, Charset.forName("UTF-8"));
+	        String language = new String (value2, Charset.forName("UTF-8"));
+	        String mime = new String (value3, Charset.forName("UTF-8"));	
+	        String crawlId = new String (value4, Charset.forName("UTF-8"));
+
+	
+	            
+	        //convert to PactString
+	        PactString pactTitle = new PactString(title);
+	        PactString pactText = new PactString(text); 
+	        PactString pactLanguage = new PactString(language); 
+	        PactString pactMime = new PactString(mime); 	
+	        PactString pactCrawlId = new PactString(crawlId); 
+	            
+	            
+	        PactRecord out = new PactRecord();
+	            
+	        //set PactRecord out
+	        out.setField(0, pactTitle);
+	        out.setField(1, pactText);
+	        out.setField(2, pactLanguage);
+			out.setField(3, pactMime);
+			out.setField(4, pactCrawlId);
+
+				
+			return out;
+			
+			}
 		
-	}
+		}
 		
 		
 	
