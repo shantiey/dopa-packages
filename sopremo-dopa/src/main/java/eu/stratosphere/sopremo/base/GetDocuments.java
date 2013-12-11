@@ -63,6 +63,9 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 			JsonParser jsonParser = new JsonParser(record.getField(0, PactString.class).getValue());
 			IJsonNode input = jsonParser.readValueAsTree();
 			
+			
+			
+			
 			//TODO: determine if record is a single item or a list
 			for(int k=0; k<record.getNumFields();k++){
 				
@@ -76,6 +79,7 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 		
 		/**
 		 * Build a PactRecord out of the given url. The first entry of the new PactRecord is the url, the second is the content,...
+		 * 
 		 * @param url the url for the new PactRecord
 		 * @return return the new PactRecord
 		 */
