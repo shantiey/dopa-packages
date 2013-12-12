@@ -1,5 +1,6 @@
 package eu.stratosphere.sopremo.base;
 
+import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.List;
 
@@ -10,6 +11,8 @@ import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
 import org.codehaus.jackson.JsonNode;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 import eu.stratosphere.pact.common.IdentityMap;
 import eu.stratosphere.pact.common.contract.MapContract;
@@ -59,21 +62,20 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 		public void map(PactRecord record, Collector<PactRecord> out)
 				throws Exception {
 			// only for data pool = IMR
+			String url;
+			String crawlId;
 			
-			JsonParser jsonParser = new JsonParser(record.getField(0, PactString.class).getValue());
-			IJsonNode input = jsonParser.readValueAsTree();
-			
-			
-			
-			
-			//TODO: determine if record is a single item or a list
-			for(int k=0; k<record.getNumFields();k++){
-				
-				PactString url = record.getField(0, PactString.class);			
-				out.collect(buildPactRecord(url));
-			}
-			
+			JSONObject obj = new JSONObject(record.getField(0, PactString.class).getValue());
 
+			
+			JSONArray array = obj.names();
+			
+			for(int i=0;i<array.length();i++){
+				url = array.getJSONObject(i).getJSONObject("url").toString();
+				crawlId = array.getJSONObject(i).getJSONObject("crawlId").toString();
+				
+				out.collect(buildPactRecord(url,crawlId));
+			}
 		}
 		
 		
@@ -83,15 +85,17 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 		 * @param url the url for the new PactRecord
 		 * @return return the new PactRecord
 		 */
-		private PactRecord buildPactRecord(PactString url){
+		private PactRecord buildPactRecord(String url, String crawlId){
 			
 			conf.addResource(new Path("file:///0/platform-strato/hbase-site_imr.xml"));
 			
-			//TODO: find out what the tablename is
-			HTable table = new HTable(conf, tablename);
+			HTable table;
+			try {
+				table = new HTable(conf, crawlId);
+			
 				
 			//the "row's" are the url's 
-			byte[] row = url.toString().getBytes();
+			byte[] row = url.getBytes();
 			
             Get get = new Get(row);
 	        get.addColumn(BASELINE_FAMILY, TITLE_QUALIFIER);
@@ -102,6 +106,8 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 	            
 	        //get the information/results from the hBase table
 	        Result res = table.get(get);
+	        table.close();
+			
 	          
 	        //extract all the data and put it in an object
 	        byte[] value0 = res.getValue(BASELINE_FAMILY, TITLE_QUALIFIER);
@@ -115,17 +121,14 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
             String text = new String (value1, Charset.forName("UTF-8"));
 	        String language = new String (value2, Charset.forName("UTF-8"));
 	        String mime = new String (value3, Charset.forName("UTF-8"));	
-	        String crawlId = new String (value4, Charset.forName("UTF-8"));
-
-	
-	            
+	        String crawl = new String (value4, Charset.forName("UTF-8"));
+	        
 	        //convert to PactString
 	        PactString pactTitle = new PactString(title);
 	        PactString pactText = new PactString(text); 
 	        PactString pactLanguage = new PactString(language); 
 	        PactString pactMime = new PactString(mime); 	
-	        PactString pactCrawlId = new PactString(crawlId); 
-	            
+	        PactString pactCrawlId = new PactString(crawl); 
 	            
 	        PactRecord out = new PactRecord();
 	            
@@ -136,16 +139,17 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 			out.setField(3, pactMime);
 			out.setField(4, pactCrawlId);
 
-				
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}			
 			return out;
-			
-			}
-		
 		}
+	}
 		
 		
 	
-	// unchanged method from super-class
+/*	// unchanged method from super-class
 	//TODO: add parameter for data pool
 	@Override
 	public PactModule asPactModule(final EvaluationContext context, SopremoRecordLayout layout) {
@@ -173,6 +177,6 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 		module.getOutput(0).addInput(contract);
 		return module;
 	}
-	
+	*/
 }
 

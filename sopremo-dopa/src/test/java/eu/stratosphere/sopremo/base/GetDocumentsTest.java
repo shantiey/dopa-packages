@@ -15,6 +15,8 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import eu.stratosphere.pact.common.type.PactRecord;
+import eu.stratosphere.pact.common.type.base.PactInteger;
+import eu.stratosphere.pact.common.type.base.PactMap;
 import eu.stratosphere.pact.common.type.base.PactString;
 
 
@@ -42,13 +44,11 @@ public class GetDocumentsTest {
 			
 			
 			
-			//TODO create PactRecord with the JSONObject obj
-			
-			//TODO to create a PactRecord with the JSONObject obj either create class PactJSONObject or choose PactMap (for example) instead of
-			
 			PactRecord record = new PactRecord();
+			PactString string = new PactString(strInput);
 			
-			//record.setField(0, obj ); 
+			record.setField(0, string);
+		
 			
 			
 			
