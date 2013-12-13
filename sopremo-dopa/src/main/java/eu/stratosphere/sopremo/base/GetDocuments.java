@@ -2,34 +2,20 @@ package eu.stratosphere.sopremo.base;
 
 import java.io.IOException;
 import java.nio.charset.Charset;
-import java.util.List;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
-import org.codehaus.jackson.JsonNode;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import eu.stratosphere.pact.common.IdentityMap;
-import eu.stratosphere.pact.common.contract.MapContract;
-import eu.stratosphere.pact.common.plan.PactModule;
 import eu.stratosphere.pact.common.stubs.Collector;
 import eu.stratosphere.pact.common.stubs.MapStub;
 import eu.stratosphere.pact.common.type.PactRecord;
 import eu.stratosphere.pact.common.type.base.PactString;
-import eu.stratosphere.pact.generic.contract.Contract;
-import eu.stratosphere.pact.generic.contract.ContractUtil;
-import eu.stratosphere.sopremo.EvaluationContext;
-import eu.stratosphere.sopremo.expressions.ConstantExpression;
-import eu.stratosphere.sopremo.io.JsonParser;
 import eu.stratosphere.sopremo.operator.ElementaryOperator;
-import eu.stratosphere.sopremo.serialization.SopremoRecordLayout;
-import eu.stratosphere.sopremo.type.IJsonNode;
-import eu.stratosphere.util.IdentityList;
 
 public class GetDocuments extends ElementaryOperator<GetDocuments> {
 
@@ -80,10 +66,10 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 		
 		
 		/**
-		 * Perform an HBASE get for row 'url' on table 'crawlId' 
+		 * Perform an HBase get for row 'url' on table 'crawlId' 
 		 * 
 		 * @param url the url referencing the HBASE row
-		 * @param crawlId the crawlId referencing the HBASE table
+		 * @param crawlId the crawlId referencing the HBase table
 		 * @return return a PactRecord containing the retrieved content
 		 */
 		private PactRecord getHbaseContent(String url, String crawlId){
@@ -95,7 +81,7 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 				table = new HTable(conf, crawlId);
 			
 				
-			//the "row's" are the url's 
+			//the "rows" are the urls 
 			byte[] row = url.getBytes();
 			
             Get get = new Get(row);
@@ -105,7 +91,7 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
             get.addColumn(META_FAMILY, MIME_QUALIFIER);
 	        get.addColumn(META_FAMILY, CRAWLID_QUALIFIER);
 	            
-	        //get the information/results from the hBase table
+	        //get the information/results from the HBase table
 	        Result res = table.get(get);
 	        table.close();
 			
