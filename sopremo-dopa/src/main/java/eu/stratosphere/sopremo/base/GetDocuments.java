@@ -74,18 +74,19 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 				url = array.getJSONObject(i).getJSONObject("url").toString();
 				crawlId = array.getJSONObject(i).getJSONObject("crawlId").toString();
 				
-				out.collect(buildPactRecord(url,crawlId));
+				out.collect(getHbaseContent(url,crawlId));
 			}
 		}
 		
 		
 		/**
-		 * Build a PactRecord out of the given url. The first entry of the new PactRecord is the url, the second is the content,...
+		 * Perform an HBASE get for row 'url' on table 'crawlId' 
 		 * 
-		 * @param url the url for the new PactRecord
-		 * @return return the new PactRecord
+		 * @param url the url referencing the HBASE row
+		 * @param crawlId the crawlId referencing the HBASE table
+		 * @return return a PactRecord containing the retrieved content
 		 */
-		private PactRecord buildPactRecord(String url, String crawlId){
+		private PactRecord getHbaseContent(String url, String crawlId){
 			
 			conf.addResource(new Path("file:///0/platform-strato/hbase-site_imr.xml"));
 			
