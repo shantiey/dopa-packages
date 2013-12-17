@@ -20,9 +20,12 @@ import eu.stratosphere.sopremo.operator.ElementaryOperator;
 import eu.stratosphere.sopremo.operator.InputCardinality;
 import eu.stratosphere.sopremo.operator.Name;
 
+
+
+@Name(verb = "getDocuments")
+@InputCardinality(1)
 public class GetDocuments extends ElementaryOperator<GetDocuments> {
-	@Name(verb = "getDocuments")
-	@InputCardinality(1)
+	
 	public static class Implementation extends MapStub {
 		
 		Configuration conf = HBaseConfiguration.create();
