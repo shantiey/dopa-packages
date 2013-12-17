@@ -2,6 +2,7 @@ package eu.stratosphere.sopremo.base;
 
 import java.io.IOException;
 import java.nio.charset.Charset;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
@@ -16,9 +17,12 @@ import eu.stratosphere.pact.common.stubs.MapStub;
 import eu.stratosphere.pact.common.type.PactRecord;
 import eu.stratosphere.pact.common.type.base.PactString;
 import eu.stratosphere.sopremo.operator.ElementaryOperator;
+import eu.stratosphere.sopremo.operator.InputCardinality;
+import eu.stratosphere.sopremo.operator.Name;
 
 public class GetDocuments extends ElementaryOperator<GetDocuments> {
-
+	@Name(verb = "getDocuments")
+	@InputCardinality(1)
 	public static class Implementation extends MapStub {
 		
 		Configuration conf = HBaseConfiguration.create();
