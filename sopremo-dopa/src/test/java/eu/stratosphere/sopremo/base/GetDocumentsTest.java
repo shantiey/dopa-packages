@@ -1,7 +1,5 @@
 package eu.stratosphere.sopremo.base;
 
-
-
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
@@ -15,10 +13,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import eu.stratosphere.pact.common.type.PactRecord;
-import eu.stratosphere.pact.common.type.base.PactInteger;
-import eu.stratosphere.pact.common.type.base.PactMap;
 import eu.stratosphere.pact.common.type.base.PactString;
-
 
 public class GetDocumentsTest {
 
@@ -49,13 +44,8 @@ public class GetDocumentsTest {
 			
 			record.setField(0, string);
 		
-			
-			
-			
-			
-			
-			
-			
+
+
 			
 			//Tests!!
 			//-----------------------------
@@ -81,13 +71,7 @@ public class GetDocumentsTest {
 			
 			//-------------------------------
 			
-			
-			
-			
-			
-			
-			
-			
+
 			
 			
 		} catch (FileNotFoundException e) {
@@ -100,7 +84,6 @@ public class GetDocumentsTest {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		
 		
 	}
 

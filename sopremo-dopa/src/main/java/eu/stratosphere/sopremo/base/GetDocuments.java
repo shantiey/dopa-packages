@@ -9,16 +9,17 @@ import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
-import org.json.JSONArray;
-import org.json.JSONObject;
 
-import eu.stratosphere.pact.common.stubs.Collector;
-import eu.stratosphere.pact.common.stubs.MapStub;
 import eu.stratosphere.pact.common.type.PactRecord;
 import eu.stratosphere.pact.common.type.base.PactString;
 import eu.stratosphere.sopremo.operator.ElementaryOperator;
 import eu.stratosphere.sopremo.operator.InputCardinality;
 import eu.stratosphere.sopremo.operator.Name;
+import eu.stratosphere.sopremo.pact.GenericSopremoMap;
+import eu.stratosphere.sopremo.pact.JsonCollector;
+import eu.stratosphere.sopremo.type.IJsonNode;
+import eu.stratosphere.sopremo.type.IObjectNode;
+import eu.stratosphere.sopremo.type.TextNode;
 
 
 
@@ -26,7 +27,7 @@ import eu.stratosphere.sopremo.operator.Name;
 @InputCardinality(1)
 public class GetDocuments extends ElementaryOperator<GetDocuments> {
 	
-	public static class Implementation extends MapStub {
+	public static class Implementation extends GenericSopremoMap<IJsonNode,IJsonNode> {
 		
 		Configuration conf = HBaseConfiguration.create();
 		
@@ -51,24 +52,22 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 	    private static final byte[] CRAWLID_QUALIFIER = "crawlId".getBytes();
 
 
-		@Override
-		public void map(PactRecord record, Collector<PactRecord> out)
-				throws Exception {
+	    @Override
+	    protected void map(IJsonNode value, JsonCollector<IJsonNode> out) {
 			// only for data pool = IMR
 			String url;
 			String crawlId;
-			
-			JSONObject obj = new JSONObject(record.getField(0, PactString.class).getValue());
-
-			
-			JSONArray array = obj.names();
-			
-			for(int i=0;i<array.length();i++){
-				url = array.getJSONObject(i).getJSONObject("url").toString();
-				crawlId = array.getJSONObject(i).getJSONObject("crawlId").toString();
-				
-				out.collect(getHbaseContent(url,crawlId));
+			if (value instanceof IObjectNode) {
+				IObjectNode obj = (IObjectNode) value;
+				IJsonNode jsonurl = obj.get("url");
+				url = jsonurl.toString();
+				IJsonNode jsoncrawlId = obj.get("crawlId");
+				crawlId = jsoncrawlId.toString();
+				getHbaseContent(url, crawlId, obj);
+				out.collect(obj);
 			}
+
+		
 		}
 		
 		
@@ -79,7 +78,7 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 		 * @param crawlId the crawlId referencing the HBase table
 		 * @return return a PactRecord containing the retrieved content
 		 */
-		private PactRecord getHbaseContent(String url, String crawlId){
+		private void getHbaseContent(String url, String crawlId, IObjectNode value){
 			
 			conf.addResource(new Path("file:///0/platform-strato/hbase-site_imr.xml"));
 			
@@ -117,27 +116,17 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 	        String mime = new String (value3, Charset.forName("UTF-8"));	
 	        String crawl = new String (value4, Charset.forName("UTF-8"));
 	        
-	        //convert to PactString
-	        PactString pactTitle = new PactString(title);
-	        PactString pactText = new PactString(text); 
-	        PactString pactLanguage = new PactString(language); 
-	        PactString pactMime = new PactString(mime); 	
-	        PactString pactCrawlId = new PactString(crawl); 
-	            
-	        PactRecord out = new PactRecord();
-	            
-	        //set PactRecord out
-	        out.setField(0, pactTitle);
-	        out.setField(1, pactText);
-	        out.setField(2, pactLanguage);
-			out.setField(3, pactMime);
-			out.setField(4, pactCrawlId);
+	       
+	        value.put("title", new TextNode (title));
+	        value.put("text", new TextNode (text));
+	        value.put("language", new TextNode (language));
+	        value.put("mime", new TextNode (mime));
 
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}			
-			return out;
+			
 		}
 	}
 		
