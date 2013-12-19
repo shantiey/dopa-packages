@@ -68,8 +68,10 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 				url = jsonurl.toString();
 				IJsonNode jsoncrawlId = obj.get("crawlId");
 				crawlId = jsoncrawlId.toString();
-				getHbaseContent(url, crawlId, obj);
-				out.collect(obj);
+				
+				if(getHbaseContent(url, crawlId, obj)) {
+					out.collect(obj);
+				}
 			}
 		}
 		
@@ -158,7 +160,7 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 		boolean res = true;
 		if (value != null) {
 			IJsonNode node = value.evaluate(NullNode.getInstance());
-			if (node.toString().matches("false")) {
+			if (node.toString().toLowerCase().matches("false")) {
 				res = false;
 			}
 		}
