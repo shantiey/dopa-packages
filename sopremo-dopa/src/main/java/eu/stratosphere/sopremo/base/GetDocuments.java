@@ -66,67 +66,75 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 				getHbaseContent(url, crawlId, obj);
 				out.collect(obj);
 			}
-
-		
 		}
 		
 		
 		/**
 		 * Perform an HBase get for row 'url' on table 'crawlId' 
 		 * 
-		 * @param url the url referencing the HBASE row
-		 * @param crawlId the crawlId referencing the HBase table
-		 * @return return a PactRecord containing the retrieved content
+		 * @param url : String the url referencing the HBASE row
+		 * @param crawlId : String the crawlId referencing the HBase table
+		 * @param value : IObjectNode the parsed input Json object to enrich with hbase content
 		 */
 		private void getHbaseContent(String url, String crawlId, IObjectNode value){
 			
-			conf.addResource(new Path("file:///0/platform-strato/hbase-site_imr.xml"));
-			
-			HTable table;
-			try {
-				table = new HTable(conf, crawlId);
-			
+			if (crawlId != null && !crawlId.matches("")){
+				conf.addResource(new Path("file:///0/platform-strato/hbase-site_imr.xml"));
 				
-			//the "rows" are the urls 
-			byte[] row = url.getBytes();
-			
-            Get get = new Get(row);
-	        get.addColumn(BASELINE_FAMILY, TITLE_QUALIFIER);
-	        get.addColumn(BASELINE_FAMILY, TEXT_QUALIFIER);
-            get.addColumn(META_FAMILY, LANGUAGE_QUALIFIER);
-            get.addColumn(META_FAMILY, MIME_QUALIFIER);
-	        get.addColumn(META_FAMILY, CRAWLID_QUALIFIER);
-	            
-	        //get the information/results from the HBase table
-	        Result res = table.get(get);
-	        table.close();
-			
-	          
-	        //extract all the data and put it in an object
-	        byte[] value0 = res.getValue(BASELINE_FAMILY, TITLE_QUALIFIER);
-	        byte[] value1 = res.getValue(BASELINE_FAMILY, TEXT_QUALIFIER);
-	        byte[] value2 = res.getValue(META_FAMILY, LANGUAGE_QUALIFIER);
-	        byte[] value3 = res.getValue(META_FAMILY, MIME_QUALIFIER);
-	        byte[] value4 = res.getValue(META_FAMILY, CRAWLID_QUALIFIER);
-	
-	        // convert to String
-            String title = new String (value0, Charset.forName("UTF-8"));
-            String text = new String (value1, Charset.forName("UTF-8"));
-	        String language = new String (value2, Charset.forName("UTF-8"));
-	        String mime = new String (value3, Charset.forName("UTF-8"));	
-	        String crawl = new String (value4, Charset.forName("UTF-8"));
-	        
-	       
-	        value.put("title", new TextNode (title));
-	        value.put("text", new TextNode (text));
-	        value.put("language", new TextNode (language));
-	        value.put("mime", new TextNode (mime));
+				HTable table;
+				try {
+					table = new HTable(conf, crawlId);
+				
+					
+				//the "rows" are the urls 
+				byte[] row = url.getBytes();
+				
+	            Get get = new Get(row);
+		        get.addColumn(BASELINE_FAMILY, TITLE_QUALIFIER);
+		        get.addColumn(BASELINE_FAMILY, TEXT_QUALIFIER);
+	            get.addColumn(META_FAMILY, LANGUAGE_QUALIFIER);
+	            get.addColumn(META_FAMILY, MIME_QUALIFIER);
+		        get.addColumn(META_FAMILY, CRAWLID_QUALIFIER);
+		            
+		        //get the information/results from the HBase table
+		        Result res = table.get(get);
+		        table.close();
+				
+		          
+		        //extract all the data and put it in an object
+		        byte[] value0 = res.getValue(BASELINE_FAMILY, TITLE_QUALIFIER);
+		        byte[] value1 = res.getValue(BASELINE_FAMILY, TEXT_QUALIFIER);
+		        byte[] value2 = res.getValue(META_FAMILY, LANGUAGE_QUALIFIER);
+		        byte[] value3 = res.getValue(META_FAMILY, MIME_QUALIFIER);
+		        //byte[] value4 = res.getValue(META_FAMILY, CRAWLID_QUALIFIER);
+		
+		        // convert to String
+		        if(value0 != null) {
+		        	String title = new String (value0, Charset.forName("UTF-8"));
+		        	value.put("title", new TextNode (title));
+		        }
+		        if(value1 != null) {
+		        	String text = new String (value1, Charset.forName("UTF-8"));
+		        	value.put("text", new TextNode (text));
+		        }
+		        if(value2 != null) {
+		        	String language = new String (value2, Charset.forName("UTF-8"));
+		        	value.put("language", new TextNode (language));
+		        }
+		        if(value3 != null) {
+		        	String mime = new String (value3, Charset.forName("UTF-8"));
+		        	value.put("mime", new TextNode (mime));
+		        }
+		        // crawlId already contained in the object
+		        /*if(value4 != null) {
+		        	String crawl = new String (value4, Charset.forName("UTF-8"));
+		        }*/
 
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}			
-			
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}	
+			}
 		}
 	}
 		
@@ -134,6 +142,7 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 	
 /*	// unchanged method from super-class
 	//TODO: add parameter for data pool
+	//TODO: add parameter for handling of input with missing information
 	@Override
 	public PactModule asPactModule(final EvaluationContext context, SopremoRecordLayout layout) {
 		final Contract contract = this.getContract(layout);
