@@ -12,13 +12,16 @@ import org.apache.hadoop.hbase.client.Result;
 
 import eu.stratosphere.pact.common.type.PactRecord;
 import eu.stratosphere.pact.common.type.base.PactString;
+import eu.stratosphere.sopremo.expressions.EvaluationExpression;
 import eu.stratosphere.sopremo.operator.ElementaryOperator;
 import eu.stratosphere.sopremo.operator.InputCardinality;
 import eu.stratosphere.sopremo.operator.Name;
+import eu.stratosphere.sopremo.operator.Property;
 import eu.stratosphere.sopremo.pact.GenericSopremoMap;
 import eu.stratosphere.sopremo.pact.JsonCollector;
 import eu.stratosphere.sopremo.type.IJsonNode;
 import eu.stratosphere.sopremo.type.IObjectNode;
+import eu.stratosphere.sopremo.type.NullNode;
 import eu.stratosphere.sopremo.type.TextNode;
 
 
@@ -26,6 +29,8 @@ import eu.stratosphere.sopremo.type.TextNode;
 @Name(verb = "getDocuments")
 @InputCardinality(1)
 public class GetDocuments extends ElementaryOperator<GetDocuments> {
+	
+	boolean keepUnfound = true;
 	
 	public static class Implementation extends GenericSopremoMap<IJsonNode,IJsonNode> {
 		
@@ -35,7 +40,7 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 		PactString identifier = new PactString();
 		PactString meta_data = new PactString();
 		
-		DataMarketAccess dm = new DataMarketAccess();
+		//DataMarketAccess dm = new DataMarketAccess();
 		PactString content = new PactString();
 		
 		PactRecord out = new PactRecord();
@@ -76,7 +81,9 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 		 * @param crawlId : String the crawlId referencing the HBase table
 		 * @param value : IObjectNode the parsed input Json object to enrich with hbase content
 		 */
-		private void getHbaseContent(String url, String crawlId, IObjectNode value){
+		private boolean getHbaseContent(String url, String crawlId, IObjectNode value){
+			
+			boolean complete = true;
 			
 			if (crawlId != null && !crawlId.matches("")){
 				conf.addResource(new Path("file:///0/platform-strato/hbase-site_imr.xml"));
@@ -86,45 +93,49 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 					table = new HTable(conf, crawlId);
 				
 					
-				//the "rows" are the urls 
-				byte[] row = url.getBytes();
+				if(url != null && !url.matches("")){
+					byte[] row = url.getBytes();
+					
+		            Get get = new Get(row);
+			        get.addColumn(BASELINE_FAMILY, TITLE_QUALIFIER);
+			        get.addColumn(BASELINE_FAMILY, TEXT_QUALIFIER);
+		            get.addColumn(META_FAMILY, LANGUAGE_QUALIFIER);
+		            get.addColumn(META_FAMILY, MIME_QUALIFIER);
+			        get.addColumn(META_FAMILY, CRAWLID_QUALIFIER);
+			            
+			        //get the information/results from the HBase table
+			        Result res = table.get(get);
+			        table.close();
+					
+			          
+			        //extract all the data and put it in an object
+			        byte[] value0 = res.getValue(BASELINE_FAMILY, TITLE_QUALIFIER);
+			        byte[] value1 = res.getValue(BASELINE_FAMILY, TEXT_QUALIFIER);
+			        byte[] value2 = res.getValue(META_FAMILY, LANGUAGE_QUALIFIER);
+			        byte[] value3 = res.getValue(META_FAMILY, MIME_QUALIFIER);
+			        //byte[] value4 = res.getValue(META_FAMILY, CRAWLID_QUALIFIER);
+			
+			        // convert to String
+			        if(value0 != null) {
+			        	String title = new String (value0, Charset.forName("UTF-8"));
+			        	value.put("title", new TextNode (title));
+			        }
+			        if(value1 != null) {
+			        	String text = new String (value1, Charset.forName("UTF-8"));
+			        	value.put("text", new TextNode (text));
+			        }
+			        if(value2 != null) {
+			        	String language = new String (value2, Charset.forName("UTF-8"));
+			        	value.put("language", new TextNode (language));
+			        }
+			        if(value3 != null) {
+			        	String mime = new String (value3, Charset.forName("UTF-8"));
+			        	value.put("mime", new TextNode (mime));
+			        }
+				} else {
+					complete = false;
+				}
 				
-	            Get get = new Get(row);
-		        get.addColumn(BASELINE_FAMILY, TITLE_QUALIFIER);
-		        get.addColumn(BASELINE_FAMILY, TEXT_QUALIFIER);
-	            get.addColumn(META_FAMILY, LANGUAGE_QUALIFIER);
-	            get.addColumn(META_FAMILY, MIME_QUALIFIER);
-		        get.addColumn(META_FAMILY, CRAWLID_QUALIFIER);
-		            
-		        //get the information/results from the HBase table
-		        Result res = table.get(get);
-		        table.close();
-				
-		          
-		        //extract all the data and put it in an object
-		        byte[] value0 = res.getValue(BASELINE_FAMILY, TITLE_QUALIFIER);
-		        byte[] value1 = res.getValue(BASELINE_FAMILY, TEXT_QUALIFIER);
-		        byte[] value2 = res.getValue(META_FAMILY, LANGUAGE_QUALIFIER);
-		        byte[] value3 = res.getValue(META_FAMILY, MIME_QUALIFIER);
-		        //byte[] value4 = res.getValue(META_FAMILY, CRAWLID_QUALIFIER);
-		
-		        // convert to String
-		        if(value0 != null) {
-		        	String title = new String (value0, Charset.forName("UTF-8"));
-		        	value.put("title", new TextNode (title));
-		        }
-		        if(value1 != null) {
-		        	String text = new String (value1, Charset.forName("UTF-8"));
-		        	value.put("text", new TextNode (text));
-		        }
-		        if(value2 != null) {
-		        	String language = new String (value2, Charset.forName("UTF-8"));
-		        	value.put("language", new TextNode (language));
-		        }
-		        if(value3 != null) {
-		        	String mime = new String (value3, Charset.forName("UTF-8"));
-		        	value.put("mime", new TextNode (mime));
-		        }
 		        // crawlId already contained in the object
 		        /*if(value4 != null) {
 		        	String crawl = new String (value4, Charset.forName("UTF-8"));
@@ -134,8 +145,25 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}	
+			} else {
+				complete = false;
+			}
+			return complete;
+		}
+	}
+	
+	@Property(preferred = false)
+	@Name(noun = "keepUnfound")
+	public void setKeepUnfound(EvaluationExpression value) {
+		boolean res = true;
+		if (value != null) {
+			IJsonNode node = value.evaluate(NullNode.getInstance());
+			if (node.toString().matches("false")) {
+				res = false;
 			}
 		}
+		
+		this.keepUnfound = res;
 	}
 		
 		
