@@ -2,6 +2,7 @@ package eu.stratosphere.sopremo.base;
 
 import java.io.IOException;
 import java.nio.charset.Charset;
+import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
@@ -10,8 +11,16 @@ import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
 
+import eu.stratosphere.pact.common.IdentityMap;
+import eu.stratosphere.pact.common.contract.GenericDataSource;
+import eu.stratosphere.pact.common.contract.MapContract;
+import eu.stratosphere.pact.common.plan.ContractUtil;
+import eu.stratosphere.pact.common.plan.PactModule;
 import eu.stratosphere.pact.common.type.PactRecord;
 import eu.stratosphere.pact.common.type.base.PactString;
+import eu.stratosphere.pact.generic.contract.Contract;
+import eu.stratosphere.sopremo.EvaluationContext;
+import eu.stratosphere.sopremo.base.DataMarketAccess.DataMarketInputFormat;
 import eu.stratosphere.sopremo.expressions.EvaluationExpression;
 import eu.stratosphere.sopremo.operator.ElementaryOperator;
 import eu.stratosphere.sopremo.operator.InputCardinality;
@@ -19,10 +28,13 @@ import eu.stratosphere.sopremo.operator.Name;
 import eu.stratosphere.sopremo.operator.Property;
 import eu.stratosphere.sopremo.pact.GenericSopremoMap;
 import eu.stratosphere.sopremo.pact.JsonCollector;
+import eu.stratosphere.sopremo.pact.SopremoUtil;
+import eu.stratosphere.sopremo.serialization.SopremoRecordLayout;
 import eu.stratosphere.sopremo.type.IJsonNode;
 import eu.stratosphere.sopremo.type.IObjectNode;
 import eu.stratosphere.sopremo.type.NullNode;
 import eu.stratosphere.sopremo.type.TextNode;
+import eu.stratosphere.util.IdentityList;
 
 
 
@@ -32,9 +44,15 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 	
 	boolean keepUnfound = true;
 	
+	public boolean getKeepUnfound(){
+		return this.keepUnfound;
+	}
+	
 	public static class Implementation extends GenericSopremoMap<IJsonNode,IJsonNode> {
 		
 		Configuration conf = HBaseConfiguration.create();
+		
+		boolean keepUnfound = ;
 		
 		PactString data_pool = new PactString();
 		PactString identifier = new PactString();
@@ -69,9 +87,11 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 				IJsonNode jsoncrawlId = obj.get("crawlId");
 				crawlId = jsoncrawlId.toString();
 				
-				if(getHbaseContent(url, crawlId, obj)) {
+				boolean succ = getHbaseContent(url, crawlId, obj);
+				if( && succ){
 					out.collect(obj);
 				}
+				
 			}
 		}
 		
@@ -170,35 +190,24 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 		
 		
 	
-/*	// unchanged method from super-class
+	// copied from DataMarketAccess
 	//TODO: add parameter for data pool
 	//TODO: add parameter for handling of input with missing information
 	@Override
-	public PactModule asPactModule(final EvaluationContext context, SopremoRecordLayout layout) {
-		final Contract contract = this.getContract(layout);
-		context.setResultProjection(this.resultProjection);
-		this.configureContract(contract, contract.getParameters(), context, layout);
+	public PactModule asPactModule(EvaluationContext context, SopremoRecordLayout layout) {
+		GenericDataSource<?> contract = new GenericDataSource<DataMarketInputFormat>(
+				DataMarketInputFormat.class, String.format("DataMarket %s", urlParameterNodeString));
 
-		final List<List<Contract>> inputLists = ContractUtil
-			.getInputs(contract);
-		final List<Contract> distinctInputs = new IdentityList<Contract>();
-		for (final List<Contract> inputs : inputLists) {
-			// assume at least one input for each contract input slot
-			if (inputs.isEmpty())
-				inputs.add(MapContract.builder(IdentityMap.class).build());
-			for (final Contract input : inputs)
-				if (!distinctInputs.contains(input))
-					distinctInputs.add(input);
-		}
-		final PactModule module = new PactModule(distinctInputs.size(), 1);
-		for (final List<Contract> inputs : inputLists)
-			for (int index = 0; index < inputs.size(); index++)
-				inputs.set(index, module.getInput(distinctInputs.indexOf(inputs.get(index))));
-		ContractUtil.setInputs(contract, inputLists);
-
-		module.getOutput(0).addInput(contract);
-		return module;
+		final PactModule pactModule = new PactModule(0, 1);
+        SopremoUtil.setEvaluationContext(contract.getParameters(), context);
+        SopremoUtil.setLayout(contract.getParameters(), layout);
+        contract.getParameters().setString(DM_URL_PARAMETER, urlParameterNodeString);
+        contract.getParameters().setString(DM_API_KEY_PARAMETER, dmApiKeyString);
+        contract.getParameters().setString(DM_MAX_DATE, maxdate);
+        contract.getParameters().setString(DM_MIN_DATE, mindate);
+		pactModule.getOutput(0).setInput(contract);
+		return pactModule;
 	}
-	*/
+	
 }
 
