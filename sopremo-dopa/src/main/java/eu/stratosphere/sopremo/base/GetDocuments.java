@@ -10,15 +10,27 @@ import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
 
+import eu.stratosphere.nephele.template.GenericInputSplit;
+import eu.stratosphere.pact.common.contract.GenericDataSource;
+import eu.stratosphere.pact.common.io.statistics.BaseStatistics;
+import eu.stratosphere.pact.common.plan.PactModule;
 import eu.stratosphere.pact.common.type.PactRecord;
 import eu.stratosphere.pact.common.type.base.PactString;
+import eu.stratosphere.pact.generic.io.InputFormat;
+import eu.stratosphere.sopremo.EvaluationContext;
+import eu.stratosphere.sopremo.SopremoEnvironment;
+import eu.stratosphere.sopremo.expressions.EvaluationExpression;
 import eu.stratosphere.sopremo.operator.ElementaryOperator;
 import eu.stratosphere.sopremo.operator.InputCardinality;
 import eu.stratosphere.sopremo.operator.Name;
+import eu.stratosphere.sopremo.operator.Property;
 import eu.stratosphere.sopremo.pact.GenericSopremoMap;
 import eu.stratosphere.sopremo.pact.JsonCollector;
+import eu.stratosphere.sopremo.pact.SopremoUtil;
+import eu.stratosphere.sopremo.serialization.SopremoRecord;
 import eu.stratosphere.sopremo.type.IJsonNode;
 import eu.stratosphere.sopremo.type.IObjectNode;
+import eu.stratosphere.sopremo.type.NullNode;
 import eu.stratosphere.sopremo.type.TextNode;
 
 
@@ -27,7 +39,13 @@ import eu.stratosphere.sopremo.type.TextNode;
 @InputCardinality(1)
 public class GetDocuments extends ElementaryOperator<GetDocuments> {
 	
-	public static class Implementation extends GenericSopremoMap<IJsonNode,IJsonNode> {
+	protected static final String PERAMETER_VALUE = "ser_parameter";
+	private IJsonNode parameterValue= null;
+  
+	
+    
+	@SuppressWarnings("serial")
+	public static class Implementation extends GenericSopremoMap<IJsonNode,IJsonNode> implements InputFormat<SopremoRecord, GenericInputSplit> {
 		
 		Configuration conf = HBaseConfiguration.create();
 		
@@ -39,6 +57,10 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 		PactString content = new PactString();
 		
 		PactRecord out = new PactRecord();
+		
+		//new parameter to configure input parameter
+		private EvaluationContext context;
+		private String parameter;
 		
 		// baseline family
 	    private static final byte[] BASELINE_FAMILY = "baseline".getBytes();
@@ -65,6 +87,7 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 				crawlId = jsoncrawlId.toString();
 				getHbaseContent(url, crawlId, obj);
 				out.collect(obj);
+			//TODO handle the incoming parameter	
 			}
 		}
 		
@@ -136,39 +159,104 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 				}	
 			}
 		}
+
+
+		@Override
+		public void configure(
+				eu.stratosphere.nephele.configuration.Configuration parameters) {
+			
+			this.context = SopremoUtil.getEvaluationContext(parameters);
+            SopremoEnvironment.getInstance().setEvaluationContext(context);
+			parameter = parameters.getString(PERAMETER_VALUE, null);
+			
+		}
+
+
+		@Override
+		public BaseStatistics getStatistics(BaseStatistics cachedStatistics)
+				throws IOException {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+
+		@Override
+		public GenericInputSplit[] createInputSplits(int minNumSplits)
+				throws IOException {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+
+		@Override
+		public Class<? extends GenericInputSplit> getInputSplitType() {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+
+		@Override
+		public void open(GenericInputSplit split) throws IOException {
+			// TODO Auto-generated method stub
+			
+		}
+
+
+		@Override
+		public boolean reachedEnd() throws IOException {
+			// TODO Auto-generated method stub
+			return false;
+		}
+
+
+		@Override
+		public boolean nextRecord(SopremoRecord record) throws IOException {
+			// TODO Auto-generated method stub
+			return false;
+		}
+		
+		@Override
+	        public void close() throws IOException {
+	            // TODO Auto-generated method stub
+	        }
 	}
 		
 		
 	
-/*	// unchanged method from super-class
+	// unchanged method from super-class
 	//TODO: add parameter for data pool
 	//TODO: add parameter for handling of input with missing information
-	@Override
-	public PactModule asPactModule(final EvaluationContext context, SopremoRecordLayout layout) {
-		final Contract contract = this.getContract(layout);
-		context.setResultProjection(this.resultProjection);
-		this.configureContract(contract, contract.getParameters(), context, layout);
+	public PactModule asPactModule(EvaluationContext context) {
 
-		final List<List<Contract>> inputLists = ContractUtil
-			.getInputs(contract);
-		final List<Contract> distinctInputs = new IdentityList<Contract>();
-		for (final List<Contract> inputs : inputLists) {
-			// assume at least one input for each contract input slot
-			if (inputs.isEmpty())
-				inputs.add(MapContract.builder(IdentityMap.class).build());
-			for (final Contract input : inputs)
-				if (!distinctInputs.contains(input))
-					distinctInputs.add(input);
-		}
-		final PactModule module = new PactModule(distinctInputs.size(), 1);
-		for (final List<Contract> inputs : inputLists)
-			for (int index = 0; index < inputs.size(); index++)
-				inputs.set(index, module.getInput(distinctInputs.indexOf(inputs.get(index))));
-		ContractUtil.setInputs(contract, inputLists);
-
-		module.getOutput(0).addInput(contract);
+		GenericDataSource<?> contract = new GenericDataSource<Implementation>(
+				Implementation.class, String.format("GetDocuments %s",parameterValue.toString()));
+		SopremoUtil.setEvaluationContext(contract.getParameters(), context);
+		
+		//PacgModel(int numberOfInputs,int numberOfOutputs)
+		PactModule module = new PactModule (1, 1);
+		
+/*		MapContract.Builder builder = MapContract.builder(Implementation.class);
+		builder.name(this.toString());
+		builder.input(module.getInput(0));
+		MapContract mapcontract = builder.build();	
+		SopremoUtil.serialize(reducecontract.getParameters(), FIRST_VALUE, firstValue);
+*/
+		contract.getParameters().setString(PERAMETER_VALUE, parameterValue.toString());
+		module.getOutput(0).setInput(contract);
 		return module;
 	}
-	*/
+	
+	
+	@Property(preferred = true)
+	@Name(preposition = "for")
+	public void setParameterValue(EvaluationExpression value) {
+		if (value == null)
+			throw new NullPointerException("value expression must not be null");
+		this.parameterValue = value.evaluate(NullNode.getInstance());
+		
+		System.out.println("set parameter expression " + parameterValue.toString());
+	}
+	
+	
 }
 
