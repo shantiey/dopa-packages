@@ -11,15 +11,19 @@ import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
 
+import eu.stratosphere.nephele.template.GenericInputSplit;
 import eu.stratosphere.pact.common.IdentityMap;
 import eu.stratosphere.pact.common.contract.GenericDataSource;
 import eu.stratosphere.pact.common.contract.MapContract;
+import eu.stratosphere.pact.common.io.statistics.BaseStatistics;
 import eu.stratosphere.pact.common.plan.ContractUtil;
 import eu.stratosphere.pact.common.plan.PactModule;
 import eu.stratosphere.pact.common.type.PactRecord;
 import eu.stratosphere.pact.common.type.base.PactString;
 import eu.stratosphere.pact.generic.contract.Contract;
+import eu.stratosphere.pact.generic.io.InputFormat;
 import eu.stratosphere.sopremo.EvaluationContext;
+import eu.stratosphere.sopremo.SopremoEnvironment;
 import eu.stratosphere.sopremo.base.DataMarketAccess.DataMarketInputFormat;
 import eu.stratosphere.sopremo.expressions.EvaluationExpression;
 import eu.stratosphere.sopremo.operator.ElementaryOperator;
@@ -29,6 +33,7 @@ import eu.stratosphere.sopremo.operator.Property;
 import eu.stratosphere.sopremo.pact.GenericSopremoMap;
 import eu.stratosphere.sopremo.pact.JsonCollector;
 import eu.stratosphere.sopremo.pact.SopremoUtil;
+import eu.stratosphere.sopremo.serialization.SopremoRecord;
 import eu.stratosphere.sopremo.serialization.SopremoRecordLayout;
 import eu.stratosphere.sopremo.type.IJsonNode;
 import eu.stratosphere.sopremo.type.IObjectNode;
@@ -42,17 +47,20 @@ import eu.stratosphere.util.IdentityList;
 @InputCardinality(1)
 public class GetDocuments extends ElementaryOperator<GetDocuments> {
 	
-	boolean keepUnfound = true;
 	
-	public boolean getKeepUnfound(){
-		return this.keepUnfound;
-	}
+	boolean keepUnfound;
+	
+	
+	protected static final String PERAMETER_VALUE = "ser_parameter";
+	private IJsonNode parameterValue= null;
+
+	
 	
 	public static class Implementation extends GenericSopremoMap<IJsonNode,IJsonNode> {
 		
 		Configuration conf = HBaseConfiguration.create();
 		
-		boolean keepUnfound = ;
+		boolean keepUnfound = GetDocuments.getDocInputFormat.getKeepUnfound();
 		
 		PactString data_pool = new PactString();
 		PactString identifier = new PactString();
@@ -62,6 +70,9 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 		PactString content = new PactString();
 		
 		PactRecord out = new PactRecord();
+		
+
+		
 		
 		// baseline family
 	    private static final byte[] BASELINE_FAMILY = "baseline".getBytes();
@@ -88,7 +99,7 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 				crawlId = jsoncrawlId.toString();
 				
 				boolean succ = getHbaseContent(url, crawlId, obj);
-				if( && succ){
+				if( succ && keepUnfound){
 					out.collect(obj);
 				}
 				
@@ -174,40 +185,140 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 		}
 	}
 	
+	
+	@SuppressWarnings("serial")
+	public static class getDocInputFormat implements InputFormat<SopremoRecord, GenericInputSplit> {
+
+		//new parameter to configure input parameter
+		private EvaluationContext context;
+		private String parameter;
+		
+		
+		private static boolean keepUnfound= true;
+		
+		
+		public static boolean getKeepUnfound(){
+			return keepUnfound;
+		}
+		
+		
+
+
+		@Override
+		public void configure(
+				eu.stratosphere.nephele.configuration.Configuration parameters) {
+			
+			this.context = SopremoUtil.getEvaluationContext(parameters);
+            SopremoEnvironment.getInstance().setEvaluationContext(context);
+			parameter = parameters.getString(PERAMETER_VALUE, null);
+			
+		}
+
+
+		@Override
+		public BaseStatistics getStatistics(BaseStatistics cachedStatistics)
+				throws IOException {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public GenericInputSplit[] createInputSplits(int minNumSplits)
+				throws IOException {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public Class<? extends GenericInputSplit> getInputSplitType() {
+			// TODO Auto-generated method stub
+			return null;
+		}
+
+		@Override
+		public void open(GenericInputSplit split) throws IOException {
+			// TODO Auto-generated method stub
+			
+		}
+
+		@Override
+		public boolean reachedEnd() throws IOException {
+			// TODO Auto-generated method stub
+			return false;
+		}
+
+		@Override
+		public boolean nextRecord(SopremoRecord record) throws IOException {
+			// TODO Auto-generated method stub
+			return false;
+		}
+
+		@Override
+		public void close() throws IOException {
+			// TODO Auto-generated method stub
+			
+		}
+		
+		
+	}
+
+	
+	
+	//set keepUnfound by incoming noun
 	@Property(preferred = false)
 	@Name(noun = "keepUnfound")
 	public void setKeepUnfound(EvaluationExpression value) {
-		boolean res = true;
+		this.keepUnfound = true;
 		if (value != null) {
 			IJsonNode node = value.evaluate(NullNode.getInstance());
 			if (node.toString().toLowerCase().matches("false")) {
-				res = false;
+				this.keepUnfound = false;
 			}
 		}
-		
-		this.keepUnfound = res;
 	}
-		
-		
 	
-	// copied from DataMarketAccess
+	
+	
+	
+	@Property(preferred = true)
+	@Name(preposition = "for")
+	public void setParameterValue(EvaluationExpression value) {
+		if (value == null)
+			throw new NullPointerException("value expression must not be null");
+		this.parameterValue = value.evaluate(NullNode.getInstance());
+		
+		System.out.println("set parameter expression " + parameterValue.toString());
+
+	}
+	
+	
+	
+	
+	
+	// unchanged method from super-class
 	//TODO: add parameter for data pool
 	//TODO: add parameter for handling of input with missing information
-	@Override
-	public PactModule asPactModule(EvaluationContext context, SopremoRecordLayout layout) {
-		GenericDataSource<?> contract = new GenericDataSource<DataMarketInputFormat>(
-				DataMarketInputFormat.class, String.format("DataMarket %s", urlParameterNodeString));
 
-		final PactModule pactModule = new PactModule(0, 1);
-        SopremoUtil.setEvaluationContext(contract.getParameters(), context);
-        SopremoUtil.setLayout(contract.getParameters(), layout);
-        contract.getParameters().setString(DM_URL_PARAMETER, urlParameterNodeString);
-        contract.getParameters().setString(DM_API_KEY_PARAMETER, dmApiKeyString);
-        contract.getParameters().setString(DM_MAX_DATE, maxdate);
-        contract.getParameters().setString(DM_MIN_DATE, mindate);
-		pactModule.getOutput(0).setInput(contract);
-		return pactModule;
+	public PactModule asPactModule(EvaluationContext context) {
+
+		GenericDataSource<?> contract = new GenericDataSource<getDocInputFormat>(
+				getDocInputFormat.class, String.format("GetDocuments %s",parameterValue.toString()));
+		SopremoUtil.setEvaluationContext(contract.getParameters(), context);
+		
+		//PacgModel(int numberOfInputs,int numberOfOutputs)
+		PactModule module = new PactModule (1, 1);
+		
+/*		MapContract.Builder builder = MapContract.builder(Implementation.class);
+		builder.name(this.toString());
+		builder.input(module.getInput(0));
+		MapContract mapcontract = builder.build();	
+		SopremoUtil.serialize(reducecontract.getParameters(), FIRST_VALUE, firstValue);
+*/
+		contract.getParameters().setString(PERAMETER_VALUE, parameterValue.toString());
+		module.getOutput(0).setInput(contract);
+		return module;
 	}
+
 	
 }
 
