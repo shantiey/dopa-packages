@@ -45,48 +45,51 @@ import eu.stratosphere.sopremo.type.TextNode;
 @Name(verb = "getDocuments")
 @InputCardinality(1)
 public class GetDocuments extends ElementaryOperator<GetDocuments> {
-	
-	
+
+
 	boolean keepUnfound;
-	
-	
+
+
 	protected static final String PERAMETER_VALUE = "ser_parameter";
+	protected static final String KEEPUNFOUND_VALUE = "keep_unfound";
 	private IJsonNode parameterValue= null;
 
-	
-	
+
+
+	public static class Implementation extends GenericSopremoMap<IJsonNode, IJsonNode> {
+
 		Configuration conf = HBaseConfiguration.create();
-		
-		boolean keepUnfound = GetDocuments.getDocInputFormat.getKeepUnfound();
-		
+
+		boolean keepUnfound_impl = GetDocuments.getDocInputFormat.getKeepUnfound();
+
 		PactString data_pool = new PactString();
 		PactString identifier = new PactString();
 		PactString meta_data = new PactString();
-		
+
 		DataMarketAccess dm = new DataMarketAccess();
 		PactString content = new PactString();
-		
+
 		PactRecord out = new PactRecord();
-		
 
-		
-		
+
+
+
 		// baseline family
-	    private static final byte[] BASELINE_FAMILY = "baseline".getBytes();
-	    private static final byte[] TITLE_QUALIFIER = "title".getBytes();
-	    private static final byte[] TEXT_QUALIFIER = "textContent".getBytes();
+		private static final byte[] BASELINE_FAMILY = "baseline".getBytes();
+		private static final byte[] TITLE_QUALIFIER = "title".getBytes();
+		private static final byte[] TEXT_QUALIFIER = "textContent".getBytes();
 
-	    // meta family
-	    private static final byte[] META_FAMILY = "meta".getBytes();
-	    private static final byte[] LANGUAGE_QUALIFIER = "language".getBytes();
-	    private static final byte[] MIME_QUALIFIER = "mime".getBytes();
-	    private static final byte[] CRAWLID_QUALIFIER = "crawlId".getBytes();
+		// meta family
+		private static final byte[] META_FAMILY = "meta".getBytes();
+		private static final byte[] LANGUAGE_QUALIFIER = "language".getBytes();
+		private static final byte[] MIME_QUALIFIER = "mime".getBytes();
+		private static final byte[] CRAWLID_QUALIFIER = "crawlId".getBytes();
 
 
-	    @Override
-	    protected void map(IJsonNode value, JsonCollector<IJsonNode> out) {
+		@Override
+		protected void map(IJsonNode value, JsonCollector<IJsonNode> out) {
 			// only for data pool = IMR
-	    	String url;
+			String url;
 			String crawlId;
 			if (value instanceof IObjectNode) {
 				IObjectNode obj = (IObjectNode) value;
@@ -94,16 +97,16 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 				url = jsonurl.toString();
 				IJsonNode jsoncrawlId = obj.get("crawlId");
 				crawlId = jsoncrawlId.toString();
-				
+
 				boolean succ = getHbaseContent(url, crawlId, obj);
-				if( succ && keepUnfound){
+				if( succ && keepUnfound_impl){
 					out.collect(obj);
 				}
-				
+
 			}
 		}
-		
-		
+
+
 		/**
 		 * Perform an HBase get for row 'url' on table 'crawlId' 
 		 * 
@@ -111,69 +114,72 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 		 * @param crawlId : String the crawlId referencing the HBase table
 		 * @param value : IObjectNode the parsed input Json object to enrich with hbase content
 		 */
-private void getHbaseContent(String url, String crawlId, IObjectNode value){
-			
+		private boolean getHbaseContent(String url, String crawlId, IObjectNode value){
+			//TODO fix return
+			boolean succ = true;
+
 			if (crawlId != null && !crawlId.matches("")){
 				conf.addResource(new Path("file:///0/platform-strato/hbase-site_imr.xml"));
-				
+
 				HTable table;
 				try {
 					table = new HTable(conf, crawlId);
-				
-					
-				//the "rows" are the urls 
-				byte[] row = url.getBytes();
-				
-	            Get get = new Get(row);
-		        get.addColumn(BASELINE_FAMILY, TITLE_QUALIFIER);
-		        get.addColumn(BASELINE_FAMILY, TEXT_QUALIFIER);
-	            get.addColumn(META_FAMILY, LANGUAGE_QUALIFIER);
-	            get.addColumn(META_FAMILY, MIME_QUALIFIER);
-		        get.addColumn(META_FAMILY, CRAWLID_QUALIFIER);
-		            
-		        //get the information/results from the HBase table
-		        Result res = table.get(get);
-		        table.close();
-				
-		          
-		        //extract all the data and put it in an object
-		        byte[] value0 = res.getValue(BASELINE_FAMILY, TITLE_QUALIFIER);
-		        byte[] value1 = res.getValue(BASELINE_FAMILY, TEXT_QUALIFIER);
-		        byte[] value2 = res.getValue(META_FAMILY, LANGUAGE_QUALIFIER);
-		        byte[] value3 = res.getValue(META_FAMILY, MIME_QUALIFIER);
-		        //byte[] value4 = res.getValue(META_FAMILY, CRAWLID_QUALIFIER);
-		
-		        // convert to String
-		        if(value0 != null) {
-		        	String title = new String (value0, Charset.forName("UTF-8"));
-		        	value.put("title", new TextNode (title));
-		        }
-		        if(value1 != null) {
-		        	String text = new String (value1, Charset.forName("UTF-8"));
-		        	value.put("text", new TextNode (text));
-		        }
-		        if(value2 != null) {
-		        	String language = new String (value2, Charset.forName("UTF-8"));
-		        	value.put("language", new TextNode (language));
-		        }
-		        if(value3 != null) {
-		        	String mime = new String (value3, Charset.forName("UTF-8"));
-		        	value.put("mime", new TextNode (mime));
-		        }
-		        // crawlId already contained in the object
-		        /*if(value4 != null) {
+
+
+					//the "rows" are the urls 
+					byte[] row = url.getBytes();
+
+					Get get = new Get(row);
+					get.addColumn(BASELINE_FAMILY, TITLE_QUALIFIER);
+					get.addColumn(BASELINE_FAMILY, TEXT_QUALIFIER);
+					get.addColumn(META_FAMILY, LANGUAGE_QUALIFIER);
+					get.addColumn(META_FAMILY, MIME_QUALIFIER);
+					get.addColumn(META_FAMILY, CRAWLID_QUALIFIER);
+
+					//get the information/results from the HBase table
+					Result res = table.get(get);
+					table.close();
+
+
+					//extract all the data and put it in an object
+					byte[] value0 = res.getValue(BASELINE_FAMILY, TITLE_QUALIFIER);
+					byte[] value1 = res.getValue(BASELINE_FAMILY, TEXT_QUALIFIER);
+					byte[] value2 = res.getValue(META_FAMILY, LANGUAGE_QUALIFIER);
+					byte[] value3 = res.getValue(META_FAMILY, MIME_QUALIFIER);
+					//byte[] value4 = res.getValue(META_FAMILY, CRAWLID_QUALIFIER);
+
+					// convert to String
+					if(value0 != null) {
+						String title = new String (value0, Charset.forName("UTF-8"));
+						value.put("title", new TextNode (title));
+					}
+					if(value1 != null) {
+						String text = new String (value1, Charset.forName("UTF-8"));
+						value.put("text", new TextNode (text));
+					}
+					if(value2 != null) {
+						String language = new String (value2, Charset.forName("UTF-8"));
+						value.put("language", new TextNode (language));
+					}
+					if(value3 != null) {
+						String mime = new String (value3, Charset.forName("UTF-8"));
+						value.put("mime", new TextNode (mime));
+					}
+					// crawlId already contained in the object
+					/*if(value4 != null) {
 		        	String crawl = new String (value4, Charset.forName("UTF-8"));
 		        }*/
 
 				} catch (IOException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
-				}	
+				}
 			}
+			return succ;
 		}
 	}
-	
-	
+
+
 	@SuppressWarnings("serial")
 	public static class getDocInputFormat implements InputFormat<SopremoRecord, GenericInputSplit> {
 
@@ -181,25 +187,25 @@ private void getHbaseContent(String url, String crawlId, IObjectNode value){
 		private EvaluationContext context;
 		private String parameter;
 		
-		
-		private static boolean keepUnfound= true;
-		
-		
+
+
+		private static boolean keepUnfound;
+
+
 		public static boolean getKeepUnfound(){
 			return keepUnfound;
 		}
-		
-		
+
+
 
 
 		@Override
-		public void configure(
-				eu.stratosphere.nephele.configuration.Configuration parameters) {
-			
+		public void configure(eu.stratosphere.nephele.configuration.Configuration parameters) {
+
 			this.context = SopremoUtil.getEvaluationContext(parameters);
-            SopremoEnvironment.getInstance().setEvaluationContext(context);
+			SopremoEnvironment.getInstance().setEvaluationContext(context);
 			parameter = parameters.getString(PERAMETER_VALUE, null);
-			
+			keepUnfound = parameters.getBoolean(KEEPUNFOUND_VALUE, true);
 		}
 
 
@@ -226,7 +232,7 @@ private void getHbaseContent(String url, String crawlId, IObjectNode value){
 		@Override
 		public void open(GenericInputSplit split) throws IOException {
 			// TODO Auto-generated method stub
-			
+
 		}
 
 		@Override
@@ -244,14 +250,14 @@ private void getHbaseContent(String url, String crawlId, IObjectNode value){
 		@Override
 		public void close() throws IOException {
 			// TODO Auto-generated method stub
-			
+
 		}
-		
-		
+
+
 	}
 
-	
-	
+
+
 	//set keepUnfound by incoming noun
 	@Property(preferred = false)
 	@Name(noun = "keepUnfound")
@@ -264,25 +270,25 @@ private void getHbaseContent(String url, String crawlId, IObjectNode value){
 			}
 		}
 	}
-	
-	
-	
-	
+
+
+
+
 	@Property(preferred = true)
 	@Name(preposition = "for")
 	public void setParameterValue(EvaluationExpression value) {
 		if (value == null)
 			throw new NullPointerException("value expression must not be null");
 		this.parameterValue = value.evaluate(NullNode.getInstance());
-		
+
 		System.out.println("set parameter expression " + parameterValue.toString());
 
 	}
-	
-	
-	
-	
-	
+
+
+
+
+
 	// unchanged method from super-class
 	//TODO: add parameter for data pool
 	//TODO: add parameter for handling of input with missing information
@@ -292,22 +298,23 @@ private void getHbaseContent(String url, String crawlId, IObjectNode value){
 		GenericDataSource<?> contract = new GenericDataSource<getDocInputFormat>(
 				getDocInputFormat.class, String.format("GetDocuments %s",parameterValue.toString()));
 		SopremoUtil.setEvaluationContext(contract.getParameters(), context);
-		
+
 		//PacgModel(int numberOfInputs,int numberOfOutputs)
 		PactModule module = new PactModule (1, 1);
-		
-/*		MapContract.Builder builder = MapContract.builder(Implementation.class);
+
+		/*		MapContract.Builder builder = MapContract.builder(Implementation.class);
 		builder.name(this.toString());
 		builder.input(module.getInput(0));
 		MapContract mapcontract = builder.build();	
 		SopremoUtil.serialize(reducecontract.getParameters(), FIRST_VALUE, firstValue);
-*/
+		 */
 		contract.getParameters().setString(PERAMETER_VALUE, parameterValue.toString());
+		contract.getParameters().setBoolean(KEEPUNFOUND_VALUE, this.keepUnfound);
 		module.getOutput(0).setInput(contract);
 		return module;
 	}
 
-	
-	
+
+
 }
 
