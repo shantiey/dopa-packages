@@ -12,14 +12,19 @@ import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Result;
 
 import eu.stratosphere.nephele.template.GenericInputSplit;
+import eu.stratosphere.pact.common.IdentityMap;
 import eu.stratosphere.pact.common.contract.GenericDataSource;
+import eu.stratosphere.pact.common.contract.MapContract;
 import eu.stratosphere.pact.common.io.statistics.BaseStatistics;
+import eu.stratosphere.pact.common.plan.ContractUtil;
 import eu.stratosphere.pact.common.plan.PactModule;
 import eu.stratosphere.pact.common.type.PactRecord;
 import eu.stratosphere.pact.common.type.base.PactString;
+import eu.stratosphere.pact.generic.contract.Contract;
 import eu.stratosphere.pact.generic.io.InputFormat;
 import eu.stratosphere.sopremo.EvaluationContext;
 import eu.stratosphere.sopremo.SopremoEnvironment;
+import eu.stratosphere.sopremo.base.DataMarketAccess.DataMarketInputFormat;
 import eu.stratosphere.sopremo.expressions.EvaluationExpression;
 import eu.stratosphere.sopremo.operator.ElementaryOperator;
 import eu.stratosphere.sopremo.operator.InputCardinality;
@@ -29,6 +34,7 @@ import eu.stratosphere.sopremo.pact.GenericSopremoMap;
 import eu.stratosphere.sopremo.pact.JsonCollector;
 import eu.stratosphere.sopremo.pact.SopremoUtil;
 import eu.stratosphere.sopremo.serialization.SopremoRecord;
+import eu.stratosphere.sopremo.serialization.SopremoRecordLayout;
 import eu.stratosphere.sopremo.type.IJsonNode;
 import eu.stratosphere.sopremo.type.IObjectNode;
 import eu.stratosphere.sopremo.type.NullNode;
@@ -40,20 +46,18 @@ import eu.stratosphere.sopremo.type.TextNode;
 @InputCardinality(1)
 public class GetDocuments extends ElementaryOperator<GetDocuments> {
 	
+	
+	boolean keepUnfound;
+	
+	
 	protected static final String PERAMETER_VALUE = "ser_parameter";
 	private IJsonNode parameterValue= null;
-  
-	
-    
-	@SuppressWarnings("serial")
-	public static class Implementation extends GenericSopremoMap<IJsonNode,IJsonNode> implements InputFormat<SopremoRecord, GenericInputSplit> {
 
-	
 	
 	
 		Configuration conf = HBaseConfiguration.create();
 		
-		boolean keepUnfound = ;
+		boolean keepUnfound = GetDocuments.getDocInputFormat.getKeepUnfound();
 		
 		PactString data_pool = new PactString();
 		PactString identifier = new PactString();
@@ -64,9 +68,7 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 		
 		PactRecord out = new PactRecord();
 		
-		//new parameter to configure input parameter
-		private EvaluationContext context;
-		private String parameter;
+
 		
 		
 		// baseline family
@@ -92,9 +94,11 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 				url = jsonurl.toString();
 				IJsonNode jsoncrawlId = obj.get("crawlId");
 				crawlId = jsoncrawlId.toString();
-				getHbaseContent(url, crawlId, obj);
-				out.collect(obj);
-			//TODO handle the incoming parameter
+				
+				boolean succ = getHbaseContent(url, crawlId, obj);
+				if( succ && keepUnfound){
+					out.collect(obj);
+				}
 				
 			}
 		}
@@ -167,6 +171,25 @@ private void getHbaseContent(String url, String crawlId, IObjectNode value){
 				}	
 			}
 		}
+	}
+	
+	
+	@SuppressWarnings("serial")
+	public static class getDocInputFormat implements InputFormat<SopremoRecord, GenericInputSplit> {
+
+		//new parameter to configure input parameter
+		private EvaluationContext context;
+		private String parameter;
+		
+		
+		private static boolean keepUnfound= true;
+		
+		
+		public static boolean getKeepUnfound(){
+			return keepUnfound;
+		}
+		
+		
 
 
 		@Override
@@ -187,7 +210,6 @@ private void getHbaseContent(String url, String crawlId, IObjectNode value){
 			return null;
 		}
 
-
 		@Override
 		public GenericInputSplit[] createInputSplits(int minNumSplits)
 				throws IOException {
@@ -195,13 +217,11 @@ private void getHbaseContent(String url, String crawlId, IObjectNode value){
 			return null;
 		}
 
-
 		@Override
 		public Class<? extends GenericInputSplit> getInputSplitType() {
 			// TODO Auto-generated method stub
 			return null;
 		}
-
 
 		@Override
 		public void open(GenericInputSplit split) throws IOException {
@@ -209,35 +229,68 @@ private void getHbaseContent(String url, String crawlId, IObjectNode value){
 			
 		}
 
-
 		@Override
 		public boolean reachedEnd() throws IOException {
 			// TODO Auto-generated method stub
 			return false;
 		}
 
-
 		@Override
 		public boolean nextRecord(SopremoRecord record) throws IOException {
 			// TODO Auto-generated method stub
 			return false;
 		}
-		
+
 		@Override
-	        public void close() throws IOException {
-	            // TODO Auto-generated method stub
-	        }
+		public void close() throws IOException {
+			// TODO Auto-generated method stub
+			
+		}
+		
+		
 	}
+
+	
+	
+	//set keepUnfound by incoming noun
+	@Property(preferred = false)
+	@Name(noun = "keepUnfound")
+	public void setKeepUnfound(EvaluationExpression value) {
+		this.keepUnfound = true;
+		if (value != null) {
+			IJsonNode node = value.evaluate(NullNode.getInstance());
+			if (node.toString().toLowerCase().matches("false")) {
+				this.keepUnfound = false;
+			}
+		}
+	}
+	
+	
+	
+	
+	@Property(preferred = true)
+	@Name(preposition = "for")
+	public void setParameterValue(EvaluationExpression value) {
+		if (value == null)
+			throw new NullPointerException("value expression must not be null");
+		this.parameterValue = value.evaluate(NullNode.getInstance());
 		
-		
+		System.out.println("set parameter expression " + parameterValue.toString());
+
+	}
+	
+	
+	
+	
 	
 	// unchanged method from super-class
 	//TODO: add parameter for data pool
 	//TODO: add parameter for handling of input with missing information
+
 	public PactModule asPactModule(EvaluationContext context) {
 
-		GenericDataSource<?> contract = new GenericDataSource<Implementation>(
-				Implementation.class, String.format("GetDocuments %s",parameterValue.toString()));
+		GenericDataSource<?> contract = new GenericDataSource<getDocInputFormat>(
+				getDocInputFormat.class, String.format("GetDocuments %s",parameterValue.toString()));
 		SopremoUtil.setEvaluationContext(contract.getParameters(), context);
 		
 		//PacgModel(int numberOfInputs,int numberOfOutputs)
@@ -253,17 +306,7 @@ private void getHbaseContent(String url, String crawlId, IObjectNode value){
 		module.getOutput(0).setInput(contract);
 		return module;
 	}
-	
-	
-	@Property(preferred = true)
-	@Name(preposition = "for")
-	public void setParameterValue(EvaluationExpression value) {
-		if (value == null)
-			throw new NullPointerException("value expression must not be null");
-		this.parameterValue = value.evaluate(NullNode.getInstance());
-		
-		System.out.println("set parameter expression " + parameterValue.toString());
-	}
+
 	
 	
 }
