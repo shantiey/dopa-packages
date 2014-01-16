@@ -50,7 +50,7 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 	boolean keepUnfound;
 
 
-	protected static final String PERAMETER_VALUE = "ser_parameter";
+	protected static final String PARAMETER_VALUE = "ser_parameter";
 	protected static final String KEEPUNFOUND_VALUE = "keep_unfound";
 	private IJsonNode parameterValue= null;
 
@@ -99,7 +99,18 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 				crawlId = jsoncrawlId.toString();
 
 				boolean succ = getHbaseContent(url, crawlId, obj);
-				if( succ && keepUnfound_impl){
+				
+				//testing something
+				String keep = "";
+				if(keepUnfound_impl){
+					keep = "true";
+				} else {
+					keep = "false";
+				}
+				obj.put("keepUnfound", new TextNode (keep));
+				//out.collect(obj);
+				
+				if( succ || keepUnfound_impl){
 					out.collect(obj);
 				}
 
@@ -116,7 +127,7 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 		 */
 		private boolean getHbaseContent(String url, String crawlId, IObjectNode value){
 			//TODO fix return
-			boolean succ = true;
+			boolean succ = false;
 
 			if (crawlId != null && !crawlId.matches("")){
 				conf.addResource(new Path("file:///0/platform-strato/hbase-site_imr.xml"));
@@ -126,7 +137,7 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 					table = new HTable(conf, crawlId);
 
 
-					//the "rows" are the urls 
+					//the "rows" are the urls E
 					byte[] row = url.getBytes();
 
 					Get get = new Get(row);
@@ -152,10 +163,12 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 					if(value0 != null) {
 						String title = new String (value0, Charset.forName("UTF-8"));
 						value.put("title", new TextNode (title));
+						succ = true;
 					}
 					if(value1 != null) {
 						String text = new String (value1, Charset.forName("UTF-8"));
 						value.put("text", new TextNode (text));
+						succ = true;
 					}
 					if(value2 != null) {
 						String language = new String (value2, Charset.forName("UTF-8"));
@@ -204,7 +217,7 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 
 			this.context = SopremoUtil.getEvaluationContext(parameters);
 			SopremoEnvironment.getInstance().setEvaluationContext(context);
-			parameter = parameters.getString(PERAMETER_VALUE, null);
+			parameter = parameters.getString(PARAMETER_VALUE, null);
 			keepUnfound = parameters.getBoolean(KEEPUNFOUND_VALUE, true);
 		}
 
@@ -308,7 +321,7 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 		MapContract mapcontract = builder.build();	
 		SopremoUtil.serialize(reducecontract.getParameters(), FIRST_VALUE, firstValue);
 		 */
-		contract.getParameters().setString(PERAMETER_VALUE, parameterValue.toString());
+		contract.getParameters().setString(PARAMETER_VALUE, parameterValue.toString());
 		contract.getParameters().setBoolean(KEEPUNFOUND_VALUE, this.keepUnfound);
 		module.getOutput(0).setInput(contract);
 		return module;
