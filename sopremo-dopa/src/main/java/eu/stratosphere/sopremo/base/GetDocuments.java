@@ -41,20 +41,15 @@ import eu.stratosphere.sopremo.type.NullNode;
 import eu.stratosphere.sopremo.type.TextNode;
 
 
-
 @Name(verb = "getDocuments")
 @InputCardinality(1)
 public class GetDocuments extends ElementaryOperator<GetDocuments> {
 
-
 	boolean keepUnfound;
-
 
 	protected static final String PARAMETER_VALUE = "ser_parameter";
 	protected static final String KEEPUNFOUND_VALUE = "keep_unfound";
 	private IJsonNode parameterValue= null;
-
-
 
 	public static class Implementation extends GenericSopremoMap<IJsonNode, IJsonNode> {
 
@@ -70,8 +65,6 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 		PactString content = new PactString();
 
 		PactRecord out = new PactRecord();
-
-
 
 
 		// baseline family
@@ -100,7 +93,7 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 
 				boolean succ = getHbaseContent(url, crawlId, obj);
 				
-				//testing something
+				// added flag to output for debugging
 				String keep = "";
 				if(keepUnfound_impl){
 					keep = "true";
@@ -113,7 +106,6 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 				if( succ || keepUnfound_impl){
 					out.collect(obj);
 				}
-
 			}
 		}
 
@@ -199,18 +191,13 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 		//new parameter to configure input parameter
 		private EvaluationContext context;
 		private String parameter;
-		
 
-
-		private static boolean keepUnfound;
+		private static boolean keepUnfound = true;
 
 
 		public static boolean getKeepUnfound(){
 			return keepUnfound;
 		}
-
-
-
 
 		@Override
 		public void configure(eu.stratosphere.nephele.configuration.Configuration parameters) {
@@ -220,7 +207,6 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 			parameter = parameters.getString(PARAMETER_VALUE, null);
 			keepUnfound = parameters.getBoolean(KEEPUNFOUND_VALUE, true);
 		}
-
 
 		@Override
 		public BaseStatistics getStatistics(BaseStatistics cachedStatistics)
@@ -265,10 +251,7 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 			// TODO Auto-generated method stub
 
 		}
-
-
 	}
-
 
 
 	//set keepUnfound by incoming noun
@@ -284,9 +267,6 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 		}
 	}
 
-
-
-
 	@Property(preferred = true)
 	@Name(preposition = "for")
 	public void setParameterValue(EvaluationExpression value) {
@@ -299,12 +279,7 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 	}
 
 
-
-
-
-	// unchanged method from super-class
 	//TODO: add parameter for data pool
-	//TODO: add parameter for handling of input with missing information
 
 	public PactModule asPactModule(EvaluationContext context) {
 
@@ -326,8 +301,4 @@ public class GetDocuments extends ElementaryOperator<GetDocuments> {
 		module.getOutput(0).setInput(contract);
 		return module;
 	}
-
-
-
 }
-
