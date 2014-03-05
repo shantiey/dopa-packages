@@ -28,11 +28,11 @@ import eu.stratosphere.sopremo.type.ObjectNode;
 import eu.stratosphere.sopremo.type.TextNode;
 
 /**
- * This is a pre-version with the main function of operator DataImportDataMarket, 
+ * This is a test version with the main function for operator DataImportDataMarket, 
  * which convert a json input in a meta data in json file 
  * and the content in a csv file 
  * 
- * @author shan
+ * @author T.Shan
  *
  */
 public class DataMarketImportBeta {

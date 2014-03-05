@@ -36,6 +36,12 @@ import eu.stratosphere.sopremo.type.NullNode;
 import eu.stratosphere.sopremo.type.ObjectNode;
 import eu.stratosphere.sopremo.type.TextNode;
 
+/**
+ * The operator converts a json input file into a csv format
+ * and generates a meta data as well, at last saves the data in Datamarket.
+ * @author shan
+ *
+ */
 @Name(verb = "datamarketimport")
 @InputCardinality(0)
 public class DataMarketImport  extends ElementaryOperator<DataMarketImport>{
@@ -280,9 +286,6 @@ public class DataMarketImport  extends ElementaryOperator<DataMarketImport>{
 
 		DataConverter dc = new DataConverter ();
 		importDataString=dc.convertInput(importDataNode.toString());
-
-//		System.out.println("set urlParameter expression "
-//				+ urlParameterNode.toString());
 	}
 
 	@Property(preferred = false)
