@@ -1,12 +1,18 @@
 package eu.stratosphere.sopremo.base;
 
+import java.io.IOException;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Map.Entry;
 
+import eu.stratosphere.nephele.configuration.Configuration;
+import eu.stratosphere.nephele.template.GenericInputSplit;
 import eu.stratosphere.pact.common.contract.GenericDataSource;
+import eu.stratosphere.pact.common.io.statistics.BaseStatistics;
 import eu.stratosphere.pact.common.plan.PactModule;
+import eu.stratosphere.pact.generic.io.InputFormat;
 import eu.stratosphere.sopremo.EvaluationContext;
+import eu.stratosphere.sopremo.SopremoEnvironment;
 import eu.stratosphere.sopremo.base.DataMarketAccess.DataMarketInputFormat;
 import eu.stratosphere.sopremo.expressions.EvaluationExpression;
 import eu.stratosphere.sopremo.io.JsonParseException;
@@ -16,7 +22,9 @@ import eu.stratosphere.sopremo.operator.InputCardinality;
 import eu.stratosphere.sopremo.operator.Name;
 import eu.stratosphere.sopremo.operator.Property;
 import eu.stratosphere.sopremo.pact.SopremoUtil;
+import eu.stratosphere.sopremo.serialization.SopremoRecord;
 import eu.stratosphere.sopremo.serialization.SopremoRecordLayout;
+import eu.stratosphere.sopremo.type.ArrayNode;
 import eu.stratosphere.sopremo.type.BigIntegerNode;
 import eu.stratosphere.sopremo.type.DecimalNode;
 import eu.stratosphere.sopremo.type.DoubleNode;
@@ -33,18 +41,90 @@ import eu.stratosphere.sopremo.type.TextNode;
 public class DataMarketImport  extends ElementaryOperator<DataMarketImport>{
 
 	   protected static final String DM_URL_PARAMETER = "ser_dm_import_parameter";
-
+	   protected static final String DM_API_KEY_PARAMETER = "ser_api_key_parameter";
 	   
 	    private IJsonNode importDataNode = null;
 	    private String  importDataString=null;
+	    private String dmApiKeyString = null;
+	    
+	    
+	 public static class DataMarketInputFormat implements InputFormat<SopremoRecord, GenericInputSplit> {
 
+			private EvaluationContext context;
+
+	        private String importString;
+
+	        private String apiKey;
+
+			private Iterator<IJsonNode> nodeIterator;
+
+			@Override
+	   
+			public void configure(Configuration parameters) {
+				this.context = SopremoUtil.getEvaluationContext(parameters);
+	            SopremoEnvironment.getInstance().setEvaluationContext(context);
+				importString = parameters.getString(DM_URL_PARAMETER, null);
+				apiKey = parameters.getString(DM_API_KEY_PARAMETER, null);
+	           
+			}
+
+			@Override
+			public BaseStatistics getStatistics(BaseStatistics cachedStatistics)
+					throws IOException {
+				// TODO Auto-generated method stub
+				return null;
+			}
+
+			@Override
+			public GenericInputSplit[] createInputSplits(int minNumSplits)
+					throws IOException {
+				// TODO Auto-generated method stub
+				return null;
+			}
+
+			@Override
+			public Class<? extends GenericInputSplit> getInputSplitType() {
+				// TODO Auto-generated method stub
+				return null;
+			}
+
+			@Override
+			public boolean reachedEnd() throws IOException {
+				// TODO Auto-generated method stub
+				return false;
+			}
+
+			@Override
+			public boolean nextRecord(SopremoRecord record) throws IOException {
+				// TODO Auto-generated method stub
+				return false;
+			}
+
+			@Override
+			public void close() throws IOException {
+				// TODO Auto-generated method stub
+				
+			}
+			
+			@Override
+			public void open(GenericInputSplit split) throws IOException {
+				if (split.getSplitNumber() == 0) {
+	//				String response = fitForDataMarket(this.importString, apiKey);
+					// convert record format
+//					ArrayNode<IJsonNode> records = doSomethingInDataMarket(response);
+//					this.nodeIterator = records.iterator();
+				} else {
+					this.nodeIterator = null;
+				}
+			}
+		}
 	
 	
 	private class DataConverter{
 		
 		public String convertInput(String dscontent) {
-
-			String rowCsv="";
+		    String csvString="";
+			String firstRowCsv="";
 			String oneMetaField="";
 			//in case to write the data in a file later, each row is saving here as a element in the list content
 			LinkedList<String> content = new LinkedList<String>();
@@ -67,9 +147,9 @@ public class DataMarketImport  extends ElementaryOperator<DataMarketImport>{
         	String t="";
         	while(iterator.hasNext()){
         		Entry<String, IJsonNode> e=iterator.next();
-        		//collect first row of csv data
-        		String k=e.getKey();         
-        		rowCsv+=k+";";
+        		String k=e.getKey(); 
+        
+        		firstRowCsv+=k+"|";
         	       		
 	        	 IJsonNode tmp=e.getValue();
 	        	 
@@ -84,26 +164,25 @@ public class DataMarketImport  extends ElementaryOperator<DataMarketImport>{
 	        	 }else if(tmp.getType().isInstance(new LongNode())){
 	        		 meta="{ \"id\": \""+k+"\", \"type\": \"Long\"}";
 	        	}
-	        	 
-	         	t+=meta+",";
+	           	t+=meta+",";
+	    //     	 System.out.println(t);
 	        }
         	String fields=t.substring(0, t.lastIndexOf(","));
         	oneMetaField="["+fields+"]";
  //       	TextNode fieldsNode=new TextNode(oneMetaField);
- //       	SimpleImmutableEntry<String,IJsonNode> e_fields=new SimpleImmutableEntry <String,IJsonNode>("fields",fieldsNode);
- //       	SimpleImmutableEntry<String,IJsonNode> e_path=new SimpleImmutableEntry <String,IJsonNode>("path",null);
+ 
         	String metaFields="\"fields\":"+oneMetaField;
         	String schema="\"schema\": {"+metaFields+"}";
         	//TODO Path in meta file
         	String p="...";
         	String path="\"path\": \""+p+"\"";
         	String resource="\"resources\":[ {"+path+", "+schema+"}]";
-        	//TODO generate the name
-        	String name="\"name\": \""+ rowCsv+"\"";
+        	//TODO generate the name        	
+        	String name="\"name\": \""+ firstRowCsv+"\"";
         	String finalMeta="{ "+name+", "+resource+"}"; 
-        	System.out.println("MetaDat: "+finalMeta);          	           	
-        	
-        	/* Meta File:
+        	System.out.println("the meta data looks like:");
+        	System.out.println(finalMeta);          	           	
+        	/*
         	 * {"name": "Population of selected countries",
         	 *  "resources":[ {
         	 * 					"path": "countrypops.csv",
@@ -116,8 +195,8 @@ public class DataMarketImport  extends ElementaryOperator<DataMarketImport>{
         	 * }
         	 */
         	
-        	content.add(rowCsv);
- //          	finalCsv+="\n";  
+        	content.add(firstRowCsv);
+           	csvString=firstRowCsv+"\n";  
      
         	//writing the content in csv format
         	int i;
@@ -127,15 +206,17 @@ public class DataMarketImport  extends ElementaryOperator<DataMarketImport>{
         		Iterator<Entry<String, IJsonNode>> oneTuple=tuple.iterator();
         		while(oneTuple.hasNext()){
         			String tmp=oneTuple.next().getValue().toString();
-        			row+=tmp+";";        		
+        			row+=tmp+"|";        		
         		}
         		content.add(row);
-        	
+        		csvString+=row+"\n";
         	}
- //       	System.out.println(content);
-			return finalMeta;
+        	System.out.println("the csv data looks like:");
+        	System.out.println("in Array: "+content.toString());
+        	System.out.println("in String: "+csvString);
+			return csvString;
  
-   //TODO save all csv content into a array/list of String, then in BufferedWriter
+        	//TODO save all csv content into a array/list of String, then in BufferedWriter
     	/*
 		try {
 			FileOutputStream outStream = new FileOutputStream("result.csv");
@@ -150,10 +231,8 @@ public class DataMarketImport  extends ElementaryOperator<DataMarketImport>{
 		} catch (IOException  e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
+		}*/
 		}
-         	 */
-		}
-	
 	}
 	
 	@Override
@@ -184,6 +263,19 @@ public class DataMarketImport  extends ElementaryOperator<DataMarketImport>{
 	public void setImportParameter(EvaluationExpression value) {
 		if (value == null)
 			throw new NullPointerException("value expression must not be null");
+		/*
+		 *e.g. data income:[{"Country":"Germany","Year":2011,"GDP":81751602.50},
+		 *                 {"Country":"Germany","Year":2012,"GDP":80327900},
+		 *                 {"Country":"Germany","Year":2012,"GDP":80523746.001}
+		 *                 ]
+		 *converted meta-data: { "name": "Country;GDP;Year;", 
+		 *						"resources":[ {"path": "...", 
+		 *									   "schema": {"fields":[
+		 *														{ "id": "Country", "type": "String"},
+		 *														{ "id": "GDP", "type": "Decimal"},
+		 *														{ "id": "Year", "type": "Integer"}]}
+		 *							}]}
+		 */
 		importDataNode = value.evaluate(NullNode.getInstance());
 
 		DataConverter dc = new DataConverter ();
@@ -193,7 +285,14 @@ public class DataMarketImport  extends ElementaryOperator<DataMarketImport>{
 //				+ urlParameterNode.toString());
 	}
 
-
+	@Property(preferred = false)
+	@Name(noun = "key")
+	public void setKeyParameter(EvaluationExpression value) {
+		if (value == null)
+			throw new NullPointerException("value expression must not be null");
+		IJsonNode node = value.evaluate(NullNode.getInstance());
+		dmApiKeyString = node.toString();
+	}
 
    
 
