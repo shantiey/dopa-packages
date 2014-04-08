@@ -91,56 +91,13 @@ public class DataMarketVisual extends ElementaryOperator<DataMarketVisual> {
             return splits;
 		}
 
-		/**
-		 * Advanced input Split generation, requires to register
-		 * DataMarketInputSplit with Nepeheles kryo instances
-		 *
-		 * @param minNumSplits
-		 * @return
-		 */
-		private DataMarketInputSplit[] createDistributedSplits(
-				final int minNumSplits) {
-			// fetch data from DataMarket, convert to our record format, and
-			// store records in the requested input splits
-			// this assumes that DM does not return too much data
-
-			String response = fetchDataMarketResponse(this.urlParameter, apiKey);
-
-			// convert record format
-			ArrayNode<IJsonNode> records = convertDataMarketResponse(response);
-
-			// create input splits from the gathered objects
-			final int numInputSplits = Math.min(minNumSplits, records.size());
-			final DataMarketInputSplit[] inputSplits = new DataMarketInputSplit[numInputSplits];
-
-			// compute number of records per split
-			int recordsPerSplit = records.size() / numInputSplits
-					+ Math.min(1, records.size() % numInputSplits);
-
-			// create split objects
-			Iterator<IJsonNode> iterator = records.iterator();
-			for (int i = 0; i < numInputSplits; i++) {
-				// number of records in the current split
-				int numrecords = (i < numInputSplits - 1) ? recordsPerSplit
-						: (records.size() - i * recordsPerSplit)
-								% recordsPerSplit;
-				IJsonNode[] nodes = new IJsonNode[numrecords];
-				for (int j = 0; j < numrecords; j++) {
-					nodes[j] = iterator.next();
-				}
-				DataMarketInputSplit split = new DataMarketInputSplit(i, nodes);
-				inputSplits[i] = split;
-			}
-
-			return inputSplits;
-		}
-
-		private String fetchDataMarketResponse(String urlParameter, String apiKey) {
+		
+		private String fetchDataMarketResponseVis(String urlParameter, String apiKey) {
 			// fetch data from URL
 			BufferedReader reader = null;
 			String result = "";
 			try {
-				String urlstring = "http://datamarket.com/api/v1/series.json?ds=" + urlParameter;
+				String urlstring = "https://datamarket.com/lod/datasets/ds-id/view[.json]/" + urlParameter;
 				if (apiKey != null) {
 					urlstring += "&secret_key=" + apiKey;
 				}if (minDate != null) {
@@ -150,6 +107,7 @@ public class DataMarketVisual extends ElementaryOperator<DataMarketVisual> {
                     urlstring += "&maxdate=" + maxDate;
                 }
 				URL url = new URL(urlstring);
+				
 				reader = new BufferedReader(new InputStreamReader(
 						url.openStream()));
 				StringBuffer buffer = new StringBuffer();
@@ -191,7 +149,7 @@ public class DataMarketVisual extends ElementaryOperator<DataMarketVisual> {
 		@Override
 		public void open(final GenericInputSplit split) throws IOException {
 			if (split.getSplitNumber() == 0) {
-				String response = fetchDataMarketResponse(this.urlParameter, apiKey);
+				String response = fetchDataMarketResponseVis(this.urlParameter, apiKey);
 				// convert record format
 				ArrayNode<IJsonNode> records = convertDataMarketResponse(response);
 
@@ -336,7 +294,7 @@ public class DataMarketVisual extends ElementaryOperator<DataMarketVisual> {
 
 
 
-   protected static class DatasetParser {
+   protected static class DatasetParserVis {
 
 	private Map<String,IArrayNode<IJsonNode>> dimensions = new HashMap<String,IArrayNode<IJsonNode>> ();
 
@@ -365,17 +323,17 @@ public class DataMarketVisual extends ElementaryOperator<DataMarketVisual> {
 	        	Iterator<Entry<String, IJsonNode>> iterator=dimensions.iterator();
 		        while(iterator.hasNext()){
 		        	Entry<String, IJsonNode> e=iterator.next();
-		           	TextNode eachDim=(TextNode)checkDimension(ds_id,e.getKey(),e.getValue());
+		           	TextNode eachDim=(TextNode)checkDimensionSlice(ds_id,e.getKey(),e.getValue());
 
-		  	    	di+=eachDim+":";	    	//   System.out.println(di);   //e4s=7a:e4t=5:
-		   	    	one_ds_id+="!"+di.substring(0, di.lastIndexOf(":"));
+		  	    	di+=eachDim+"-";	    	//   System.out.println(di);   //e4s-7a-e4t-5- instead of e4s=7a:e4t=5:
+		   	    	one_ds_id+="-"+di.substring(0, di.lastIndexOf("-"));
 		       	}
 	        }
 
-	       	finalDS+=one_ds_id+"/";
+	       	finalDS+=one_ds_id+"-";
      }
 	  // set up the whole (multi-)dataset together
-	    finalDS=finalDS.substring(0, finalDS.lastIndexOf("/"));
+	    finalDS=finalDS.substring(0, finalDS.lastIndexOf("-"));
 
 		return finalDS;
 	}
@@ -384,7 +342,7 @@ public class DataMarketVisual extends ElementaryOperator<DataMarketVisual> {
 	 * return a form for datamarket api
 	 * {e4s: 7a}   ==> e4s=7a
 	 */
-    public TextNode checkDimension(IJsonNode ds, String id, IJsonNode value) {
+    public TextNode checkDimensionSlice(IJsonNode ds, String id, IJsonNode value) {
     	 IArrayNode<IJsonNode> dimArray = dimensions.get (ds.toString());
     	 TextNode  tmp = null;
     	 if (dimArray == null) {
@@ -448,7 +406,7 @@ public class DataMarketVisual extends ElementaryOperator<DataMarketVisual> {
      	    			value=keyValue;
      	    		 }
      	    	//set one dimension
-    	        tmp=new TextNode(id+"="+value.toString());
+    	        tmp=new TextNode(id+"-"+value.toString());
      	    	 }
      	   }
      		return tmp;
@@ -487,7 +445,7 @@ public class DataMarketVisual extends ElementaryOperator<DataMarketVisual> {
 			throw new NullPointerException("value expression must not be null");
 		urlParameterNode = value.evaluate(NullNode.getInstance());
 
-		DatasetParser ds = new DatasetParser();
+		DatasetParserVis ds = new DatasetParserVis();
 		urlParameterNodeString=ds.parseDS(urlParameterNode.toString());
 
 //		System.out.println("set urlParameter expression "
