@@ -38,7 +38,7 @@ import java.util.regex.Pattern;
 
 @Name(verb = "datamarketaccess")
 @InputCardinality(0)
-public class DataMarketAccess extends ElementaryOperator<DataMarketAccess> {
+public class DataMarketVisual extends ElementaryOperator<DataMarketVisual> {
 
     protected static final String DM_URL_PARAMETER = "ser_dm_url_parameter";
     protected static final String DM_API_KEY_PARAMETER = "ser_api_key_parameter";

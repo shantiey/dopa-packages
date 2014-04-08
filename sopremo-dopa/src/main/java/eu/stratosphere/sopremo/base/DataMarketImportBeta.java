@@ -1,31 +1,75 @@
 
 package eu.stratosphere.sopremo.base;
 
+import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.io.OutputStreamWriter;
-import java.util.AbstractMap.SimpleImmutableEntry;
+import java.io.PrintWriter;
+import java.io.UnsupportedEncodingException;
+import java.net.ContentHandlerFactory;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.net.URLConnection;
+import java.security.KeyManagementException;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Map.Entry;
 
+import javax.net.ssl.SSLHandshakeException;
+
+import org.apache.commons.httpclient.HttpClient;
+import org.apache.commons.httpclient.methods.PostMethod;
+import org.apache.commons.httpclient.methods.multipart.FilePart;
+import org.apache.commons.httpclient.methods.multipart.MultipartRequestEntity;
+import org.apache.commons.httpclient.methods.multipart.Part;
+import org.apache.commons.httpclient.util.HttpURLConnection;
+import org.apache.commons.io.IOUtils;
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
+import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.client.methods.HttpUriRequest;
+import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
+import org.apache.http.conn.ssl.SSLContextBuilder;
+import org.apache.http.conn.ssl.SSLSocketFactory;
+import org.apache.http.conn.ssl.TrustSelfSignedStrategy;
+import org.apache.http.conn.ssl.TrustStrategy;
+import org.apache.http.entity.FileEntity;
+
+
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.message.BasicNameValuePair;
 import eu.stratosphere.sopremo.io.JsonParseException;
 import eu.stratosphere.sopremo.io.JsonParser;
-import eu.stratosphere.sopremo.type.ArrayNode;
 import eu.stratosphere.sopremo.type.BigIntegerNode;
 import eu.stratosphere.sopremo.type.DecimalNode;
 import eu.stratosphere.sopremo.type.DoubleNode;
 import eu.stratosphere.sopremo.type.IArrayNode;
 import eu.stratosphere.sopremo.type.IJsonNode;
-import eu.stratosphere.sopremo.type.IObjectNode;
-import eu.stratosphere.sopremo.type.IPrimitiveNode;
 import eu.stratosphere.sopremo.type.IntNode;
 import eu.stratosphere.sopremo.type.LongNode;
-import eu.stratosphere.sopremo.type.MissingNode;
 import eu.stratosphere.sopremo.type.ObjectNode;
 import eu.stratosphere.sopremo.type.TextNode;
+
+
 
 /**
  * This is a test version with the main function for operator DataImportDataMarket, 
@@ -35,12 +79,294 @@ import eu.stratosphere.sopremo.type.TextNode;
  * @author T.Shan
  *
  */
+@SuppressWarnings("deprecation")
 public class DataMarketImportBeta {
 	
 	static String test="[{\"Country\":\"Germany\",\"Year\":2011,\"GDP\":81751602.50},{\"Country\":\"Germany\",\"Year\":2012,\"GDP\":80327900},{\"Country\":\"Germany\",\"Year\":2012,\"GDP\":80523746.001}]";
-	String testNodeType="[{\"Country\":\"Germany\"}]";
+	static String testNodeType="[{\"Country\":\"Germany\"}]";
+	static String myAccess="a40905e3e9f241ad897f6412e22c29f4";
 	
-	 @SuppressWarnings({ "unchecked", "null" })
+	
+	/**
+	 * try to convert something link this:
+	 *
+	 * curl -H "X-DataMarket-Secret-Key: $APIKEY" 
+	 * -F datapackage.json=@datapackage.json \
+	 * -F countrypops.csv=@countrypops.csv \
+	 * https://datamarket.com/import/job/
+	 * 
+	 * e.g. $APIKEY=a40905e3e9f241ad897f6412e22c29f4 
+	 * @throws MalformedURLException 
+	 */
+	public static void postUrlConnect(String apiKey, String fileName, String content, String typ) throws MalformedURLException  {
+		// build a file with content
+		try {
+		    // Create temp file.
+		    File temp = File.createTempFile(fileName, typ);
+
+		    // Delete temp file when program exits.
+		    temp.deleteOnExit();
+
+		    // Write to temp file
+		    BufferedWriter out = new BufferedWriter(new FileWriter(temp));
+		    out.write(content);
+		    out.close();
+		} catch (IOException e) {
+		}
+	
+		//set up connection
+		String param = "value";
+		File textFile = new File("/path/to/file.txt");
+		File binaryFile = new File("/path/to/file.bin");
+		String boundary = Long.toHexString(System.currentTimeMillis()); 
+		// generate some unique random value.
+		String CRLF = "\r\n"; // Line separator required by multipart/form-data.
+		URL url=new URL("https://datamarket.com/import/job/");
+		URLConnection connection;
+		try {
+			connection = url.openConnection();
+			connection.setDoOutput(true);
+			connection.setRequestProperty("Content-Type","multipart/form-data; boundary=" + boundary);
+		
+			PrintWriter writer = null;
+			OutputStream output = connection.getOutputStream();
+		    writer = new PrintWriter(new OutputStreamWriter(output, content),true);// true = autoFlush
+		
+		    // Send normal param.
+		    writer.append("--" + boundary).append(CRLF);
+		    writer.append("Content-Disposition: form-data; name=\"param\"").append(CRLF);
+		    writer.append("Content-Type: text/plain; charset=" + content).append(CRLF);
+		    writer.append(CRLF);
+		    writer.append(param).append(CRLF).flush();
+		    // Send text file.
+		    writer.append("--" + boundary).append(CRLF);
+		    writer.append(
+		        "Content-Disposition: form-data; name=\"textFile\"; filename=\""
+		            + textFile.getName() + "\"").append(CRLF);
+		    writer.append("Content-Type: text/plain; charset=" + content).append(CRLF);
+		    writer.append(CRLF).flush();
+		    BufferedReader reader = null;
+		    reader = new BufferedReader(new InputStreamReader(
+			        new FileInputStream(textFile), content));
+		    for (String line; (line = reader.readLine()) != null;) {
+	            writer.append(line).append(CRLF);
+	        }
+		    reader.close();
+		    
+		    writer.flush();
+		    // Send binary file.
+		    writer.append("--" + boundary).append(CRLF);
+		    writer.append(
+		        "Content-Disposition: form-data; name=\"binaryFile\"; filename=\""
+		            + binaryFile.getName() + "\"").append(CRLF);
+		    writer.append(
+		        "Content-Type: "
+		            + URLConnection.guessContentTypeFromName(binaryFile
+		                    .getName())).append(CRLF);
+		    writer.append("Content-Transfer-Encoding: binary").append(CRLF);
+		    writer.append(CRLF).flush();
+		    InputStream input = null;
+		    input = new FileInputStream(binaryFile);
+			
+			  
+	        byte[] buffer = new byte[1024];
+	        for (int length = 0; (length = input.read(buffer)) > 0;) {
+	            output.write(buffer, 0, length);
+	        }
+	        output.flush(); // Output cannot be closed. Close of
+	                        // writer will close output as well.
+	        input.close();
+	        
+	        writer.append(CRLF).flush(); // CRLF indicates end of binary boundary.
+            
+		    // End of multipart/form-data.
+		    writer.append("--" + boundary + "--").append(CRLF);
+		    
+		    if (writer != null) writer.close();
+		} catch (IOException e2) {
+			// TODO Auto-generated catch block
+			e2.printStackTrace();
+		    }
+	
+	}
+	
+	
+	public static void postData0(String apiKey, String meta, String csv)  {
+		HttpPost httppost = new HttpPost("https://datamarket.com/import/job/");
+		httppost.addHeader("X-DataMarket-Secret-Key", apiKey);
+		
+		// add the cintent to a file, which is allowed to approach DM
+		List<BasicNameValuePair> parameters = new ArrayList<BasicNameValuePair>();
+
+	
+	    parameters.add(new BasicNameValuePair("metaTest.json", meta));
+//	    parameters.add(new BasicNameValuePair("datapackage.csv", csv));   //upload Strig/var.
+	    
+	    //SSL decode
+	    SSLContextBuilder builder = new SSLContextBuilder();
+	    try {
+			builder.loadTrustMaterial(null, new TrustStrategy() {				
+				@Override
+				public boolean isTrusted(X509Certificate[] chain, String authType)
+						throws CertificateException {
+					// TODO Auto-generated method stub
+					return true;
+				}
+			});
+		} catch (NoSuchAlgorithmException e1) {
+			e1.printStackTrace();
+		} catch (KeyStoreException e1) {
+			
+			e1.printStackTrace();
+		}
+	    SSLConnectionSocketFactory fac;
+		try {
+			fac = new SSLConnectionSocketFactory(builder.build());
+			CloseableHttpClient client = HttpClients.custom().setSSLSocketFactory(fac).build();
+
+			httppost.setEntity(new UrlEncodedFormEntity(parameters));
+			 
+//			 post.setEntity(new FileEntity(file, "apply.json"));
+			 HttpResponse httpResponse = client.execute(httppost);
+			 HttpEntity resEntity = httpResponse.getEntity();
+			 
+			 // Get the HTTP Status Code
+			    int statusCode = httpResponse.getStatusLine().getStatusCode();
+			    System.out.println("HTTP Status Code: "+statusCode);
+			    
+			    // Get the contents of the response
+			    InputStream input;			
+				input = resEntity.getContent();				
+			    String responseBody = IOUtils.toString(input);
+			    input.close();
+			 // Print the response code and message body
+			    System.out.println(responseBody);
+			    
+		} catch (UnsupportedEncodingException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}catch (IllegalStateException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}catch (KeyManagementException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		} catch (NoSuchAlgorithmException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+	        
+	  }
+	
+	public static void postFile(String apiKey, String content, String fileName, String fileType)  {
+		HttpPost httppost = new HttpPost("https://datamarket.com/import/job/");
+		httppost.addHeader("X-DataMarket-Secret-Key", apiKey);
+		
+		// add the content to a file, which is allowed to approach DM
+		File file = null ;
+		try {
+		    // Create temp file.
+			file = File.createTempFile(fileName, fileType);   //".json"
+
+		    // Delete temp file when program exits.
+			file.deleteOnExit();
+		    // Write to temp file
+		    BufferedWriter out = new BufferedWriter(new FileWriter(file));
+		    out.write(content);
+		    out.close();
+		} catch (IOException e) {
+		}
+		   
+    //SSL decode
+	    SSLContextBuilder builder = new SSLContextBuilder();
+	    try {
+			builder.loadTrustMaterial(null, new TrustStrategy() {				
+				@Override
+				public boolean isTrusted(X509Certificate[] chain, String authType)
+						throws CertificateException {
+					// TODO Auto-generated method stub
+					return true;
+				}
+			});
+		} catch (NoSuchAlgorithmException e1) {
+			e1.printStackTrace();
+		} catch (KeyStoreException e1) {
+			
+			e1.printStackTrace();
+		}
+	    
+	    SSLConnectionSocketFactory fac; 	     
+		try {
+			fac = new SSLConnectionSocketFactory(builder.build());
+			CloseableHttpClient client = HttpClients.custom().setSSLSocketFactory(fac).build();
+		    httppost.setEntity(new FileEntity(file, "text/json, application/json"));
+			//	    CloseableHttpResponse response = client.execute(httppost);					
+		    HttpResponse httpResponse = client.execute(httppost);
+			HttpEntity resEntity = httpResponse.getEntity();
+					 				 							
+			// Get the HTTP Status Code					  
+			int status = httpResponse.getStatusLine().getStatusCode();					    
+			System.out.println("HTTP Status : "+status);				    
+					    
+			// Get the contents of the response					    
+			InputStream input;									
+			input = resEntity.getContent();		
+			String responseBody = IOUtils.toString(input);					    
+			input.close();
+					 
+			// Print the response code and message body					    
+			System.out.println(responseBody);
+					    
+				
+		} catch (UnsupportedEncodingException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				
+		}catch (IllegalStateException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				
+		} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				
+		}catch (KeyManagementException e1) {
+					// TODO Auto-generated catch block
+					e1.printStackTrace();
+				
+		} catch (NoSuchAlgorithmException e1) {
+					// TODO Auto-generated catch block
+					e1.printStackTrace();
+				
+		}
+			 
+/*			HttpURLConnection httpConnection = (HttpURLConnection)url.openConnection();
+   			httpConnection.setRequestMethod("POST");
+ 			PostMethod filePost = new PostMethod("https://datamarket.com/import/job/");
+			Part[] parts = { new FilePart("file", file) };
+			filePost.setRequestEntity(new MultipartRequestEntity(parts,filePost.getParams()));			
+			HttpClient c =(HttpClient) client.getConnectionManager();
+ */        
+	  }
+	
+	
+	@SuppressWarnings({ "unchecked" })	
+	/**
+	 *e.g. data income:[{"Country":"Germany","Year":2011,"GDP":81751602.50},
+	 *                 {"Country":"Germany","Year":2012,"GDP":80327900},
+	 *                 {"Country":"Germany","Year":2012,"GDP":80523746.001}
+	 *                 ]
+	 *converted meta-data: { "name": "Country;GDP;Year;", 
+	 *						"resources":[ {"path": "...", 
+	 *									   "schema": {"fields":[
+	 *														{ "id": "Country", "type": "String"},
+	 *														{ "id": "GDP", "type": "Decimal"},
+	 *														{ "id": "Year", "type": "Integer"}]}
+	 *							}]}
+	 */
 	public static void convertInput(String dscontent) {
 		    String csvString="";
 			String firstRowCsv="";
@@ -102,19 +428,7 @@ public class DataMarketImportBeta {
         	String finalMeta="{ "+name+", "+resource+"}"; 
         	System.out.println("the meta data looks like:");
         	System.out.println(finalMeta);          	           	
-        	/*
-        	 * {"name": "Population of selected countries",
-        	 *  "resources":[ {
-        	 * 					"path": "countrypops.csv",
-        	 * 					"schema": {
-        	 * 					TesxNode__>  "fields": [{ "id": "Year", "type": "string" },
-        	 * 						  			    	 { "id": "Country", "type": "string" },
-        	 * 						   			 { "id": "Population", "type": "number" }]
-        	 * 								}
-        	 *              } ]
-        	 * }
-        	 */
-        	
+        	        	
         	content.add(firstRowCsv);
            	csvString=firstRowCsv+"\n";  
      
@@ -136,7 +450,7 @@ public class DataMarketImportBeta {
         	System.out.println("in String: ");
         	System.out.println("    "+csvString);
  
-        	//TODO save all csv content into a array/list of String, then in BufferedWriter
+        	// save all csv content into a array/list of String, then in BufferedWriter
     	/*
 		try {
 			FileOutputStream outStream = new FileOutputStream("result.csv");
@@ -153,18 +467,57 @@ public class DataMarketImportBeta {
 			e.printStackTrace();
 		}
          	 */
+        
 	 }	
+	
+	
+	public static String convertInputCsv(String dscontent) {
+	    String csvString="";
+		String firstRowCsv="";					
+		//in case to write the data in a file later, each row is saving here as a element in the list content
+		LinkedList<String> contentCsv = new LinkedList<String>();
+		
+		// read the input 
+		JsonParser parser = new JsonParser(dscontent);
+		
+		IArrayNode<IJsonNode>data= null;
+	    try {
+	    	data =(IArrayNode<IJsonNode>) parser.readValueAsTree();
+		} catch (JsonParseException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+       	//writing the content in csv format		        	
+       	int i;
+    	for (i=0;i<data.size();i++){
+    		String row="";
+    		ObjectNode tuple=(ObjectNode) data.get(i);
+    		Iterator<Entry<String, IJsonNode>> oneTuple=tuple.iterator();
+    		while(oneTuple.hasNext()){
+    			String tmp=oneTuple.next().getValue().toString();
+    			row+=tmp+"|";        		
+    		}
+    		contentCsv.add(row);
+    		csvString+=row+"\n";
+    	}
+    	System.out.println("the csv data looks like:");
+    	System.out.println("in Array: "+contentCsv.toString());
+    	System.out.println("in String: "+csvString);
+		return csvString;
+}
+
 	 
-	 public static void main(String[] args){ 
+	 public static void main(String[] args) throws ClientProtocolException, IOException, KeyManagementException, NoSuchAlgorithmException, KeyStoreException{ 
 	       
+	//	 testing convert data	 
 		 System.out.println("Incoming data: "+test); 
-		 System.out.println("converting data ... "); 
-	 
-	        convertInput(test);	 
-	        IJsonNode jnode = null;
-	        String a="[{\"Country\":\"Germany\"}]";
-	        String b="{Country: String, GDP: Decimal, Year: Integer,}";
+//		 System.out.println("converting data ... "); 
 	        
-	       
+//		 convertInputCsv(test);	 
+	        
+
+//	   postData0(myAccess,testNodeType,"a,b,c");
+	   postFile(myAccess,testNodeType,"datapackage",".json");
 	    } 
 }

@@ -1,16 +1,38 @@
 package eu.stratosphere.sopremo.base;
 
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.UnsupportedEncodingException;
+import java.security.KeyManagementException;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Map.Entry;
 
+import org.apache.commons.io.IOUtils;
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
+import org.apache.http.conn.ssl.SSLContextBuilder;
+import org.apache.http.conn.ssl.TrustStrategy;
+import org.apache.http.entity.FileEntity;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
+
 import eu.stratosphere.nephele.configuration.Configuration;
 import eu.stratosphere.nephele.template.GenericInputSplit;
+import eu.stratosphere.pact.common.contract.GenericDataSink;
 import eu.stratosphere.pact.common.contract.GenericDataSource;
 import eu.stratosphere.pact.common.io.statistics.BaseStatistics;
 import eu.stratosphere.pact.common.plan.PactModule;
-import eu.stratosphere.pact.generic.io.InputFormat;
+import eu.stratosphere.pact.generic.io.OutputFormat;
 import eu.stratosphere.sopremo.EvaluationContext;
 import eu.stratosphere.sopremo.SopremoEnvironment;
 import eu.stratosphere.sopremo.base.DataMarketAccess.DataMarketInputFormat;
@@ -40,206 +62,266 @@ import eu.stratosphere.sopremo.type.TextNode;
  * The operator converts a json input file into a csv format
  * and generates a meta data as well, at last saves the data in Datamarket.
  * @author shan
- *
  */
 @Name(verb = "datamarketimport")
 @InputCardinality(0)
 public class DataMarketImport  extends ElementaryOperator<DataMarketImport>{
 
-	   protected static final String DM_URL_PARAMETER = "ser_dm_import_parameter";
+	   protected static final String DM_URL_PARAMETER = "ser_dm_export_parameter";
 	   protected static final String DM_API_KEY_PARAMETER = "ser_api_key_parameter";
 	   
-	    private IJsonNode importDataNode = null;
-	    private String  importDataString=null;
+	    private IJsonNode scriptNode = null;
+	    private String  scriptString=null;
 	    private String dmApiKeyString = null;
 	    
 	    
-	 public static class DataMarketInputFormat implements InputFormat<SopremoRecord, GenericInputSplit> {
+	 public static class DataMarketOutputFormat implements OutputFormat<SopremoRecord> {
 
 			private EvaluationContext context;
-
-	        private String importString;
-
+	        private String incomingString;
 	        private String apiKey;
-
-			private Iterator<IJsonNode> nodeIterator;
+	        int teskNumber;
+	        
+//	        Iterator<IJsonNode> nodeIterator;
 
 			@Override
-	   
 			public void configure(Configuration parameters) {
 				this.context = SopremoUtil.getEvaluationContext(parameters);
 	            SopremoEnvironment.getInstance().setEvaluationContext(context);
-				importString = parameters.getString(DM_URL_PARAMETER, null);
+	            incomingString = parameters.getString(DM_URL_PARAMETER, null);
 				apiKey = parameters.getString(DM_API_KEY_PARAMETER, null);
-	           
+	          
 			}
 
+			public void setTaskNumber(){
+				if (incomingString.isEmpty()){
+					 this.teskNumber=0;
+				}else{
+					this.teskNumber=1;
+				}
+			}
 			@Override
-			public BaseStatistics getStatistics(BaseStatistics cachedStatistics)
-					throws IOException {
-				// TODO Auto-generated method stub
-				return null;
+			public void open(int taskNumber) throws IOException {
+				
+				if (taskNumber==0) {
+					System.out.println("There is no job in DataMarketImport currently");					
+					
+				} else {
+					// convert record format
+					DataConverter dc=new DataConverter();
+					String meta = dc.convertInputMeta(this.incomingString);
+					String csv=dc.convertInputCsv(incomingString);
+					
+					//post to DataMarket
+					postFile(apiKey, meta, "dataPackage", ".json");
+					postFile(apiKey, csv, "dataCsv", ".csv");
+				}
+				
 			}
 
+			/**
+			 * Adds a record to the output.			 * 
+			 * @param record:The records to add to the output.
+			 */
 			@Override
-			public GenericInputSplit[] createInputSplits(int minNumSplits)
-					throws IOException {
-				// TODO Auto-generated method stub
-				return null;
+			public void writeRecord(SopremoRecord record) throws IOException {
+				// TODO Auto-generated method stub				
 			}
 
-			@Override
-			public Class<? extends GenericInputSplit> getInputSplitType() {
-				// TODO Auto-generated method stub
-				return null;
-			}
-
-			@Override
-			public boolean reachedEnd() throws IOException {
-				// TODO Auto-generated method stub
-				return false;
-			}
-
-			@Override
-			public boolean nextRecord(SopremoRecord record) throws IOException {
-				// TODO Auto-generated method stub
-				return false;
-			}
-
+			/**
+			 * Method that marks the end of the life-cycle of parallel output instance. Should be used to close
+			 * channels and streams and release resources.
+			 * After this method returns without an error, the output is assumed to be correct.
+			 * <p>
+			 * When this method is called, the output format it guaranteed to be opened.
+			 *  
+			 * @throws IOException Thrown, if the input could not be closed properly.
+			 */
 			@Override
 			public void close() throws IOException {
 				// TODO Auto-generated method stub
 				
 			}
 			
-			@Override
-			public void open(GenericInputSplit split) throws IOException {
-				if (split.getSplitNumber() == 0) {
-	//				String response = fitForDataMarket(this.importString, apiKey);
-					// convert record format
-//					ArrayNode<IJsonNode> records = doSomethingInDataMarket(response);
-//					this.nodeIterator = records.iterator();
-				} else {
-					this.nodeIterator = null;
+			@SuppressWarnings("deprecation")
+			public static void postFile(String apiKey, String content, String fileName, String fileType)  {
+				HttpPost httppost = new HttpPost("https://datamarket.com/import/job/");
+				httppost.addHeader("X-DataMarket-Secret-Key", apiKey);
+				
+				// add the content to a file, which is allowed to approach DM
+				File file = null ;
+				try {
+				    // Create temp file.
+					file = File.createTempFile(fileName, fileType);   //".json"
+
+				    // Delete temp file when program exits.
+					file.deleteOnExit();
+
+				    // Write to temp file
+				    BufferedWriter out = new BufferedWriter(new FileWriter(file));
+				    out.write(content);
+				    out.close();
+				} catch (IOException e) {
 				}
+				   
+		    //SSL decode
+			    SSLContextBuilder builder = new SSLContextBuilder();
+			    try {
+					builder.loadTrustMaterial(null, new TrustStrategy() {				
+						@Override
+						public boolean isTrusted(X509Certificate[] chain, String authType)
+								throws CertificateException {
+							// TODO Auto-generated method stub
+							return true;
+						}
+					});
+				} catch (NoSuchAlgorithmException e1) {
+					e1.printStackTrace();
+				} catch (KeyStoreException e1) {
+					
+					e1.printStackTrace();
+				}
+			    
+			    SSLConnectionSocketFactory fac; 	     
+				try {
+					fac = new SSLConnectionSocketFactory(builder.build());
+					CloseableHttpClient client = HttpClients.custom().setSSLSocketFactory(fac).build();
+				    httppost.setEntity(new FileEntity(file, "text/"+fileType+" , application/"+fileType)); //"text/json, application/json"
+				//  CloseableHttpResponse response = client.execute(httppost); //post String directly				
+				    HttpResponse httpResponse = client.execute(httppost);
+					HttpEntity resEntity = httpResponse.getEntity();
+							 				 							
+					// Get the HTTP Status Code					  
+					int status = httpResponse.getStatusLine().getStatusCode();					    
+					System.out.println("HTTP Status : "+status);				    
+							    
+					// Get the contents of the response					    
+					InputStream input;									
+					input = resEntity.getContent();		
+					String responseBody = IOUtils.toString(input);					    
+					input.close();
+							 
+					// Print the response code and message body					    
+					System.out.println(responseBody);						    
+						
+				} catch (UnsupportedEncodingException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();						
+				}catch (IllegalStateException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();						
+				} catch (IOException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();						
+				}catch (KeyManagementException e1) {
+							// TODO Auto-generated catch block
+							e1.printStackTrace();						
+				} catch (NoSuchAlgorithmException e1) {
+							// TODO Auto-generated catch block
+							e1.printStackTrace();						
+				}		       
+			  }
+			
+			
+			protected class DataConverter{
+				
+				public String convertInputMeta(String dscontent) {
+				    
+					String oneMetaField="";
+										
+					// write a meta data
+					JsonParser parser = new JsonParser(dscontent);
+					
+					IArrayNode<IJsonNode>data= null;
+				    try {
+				    	data =(IArrayNode<IJsonNode>) parser.readValueAsTree();
+					} catch (JsonParseException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+				    //check the types of input by first row
+				    ObjectNode da=(ObjectNode) data.get(0);		    
+		        	Iterator<Entry<String, IJsonNode>> iterator=da.iterator();
+		        	
+		        	String meta="";
+		        	String tmpmeta="";
+		        	while(iterator.hasNext()){
+		        		Entry<String, IJsonNode> e=iterator.next();
+		        		String k=e.getKey(); 		        
+		        			        	       		
+			        	 IJsonNode tmp=e.getValue();
+			        	 
+			        	 if (tmp.getType().isInstance(new TextNode())){
+			        		 meta="{ \"id\": \""+k+"\", \"type\": \"String\"}";
+			        	 }else if(tmp.getType().isInstance(new IntNode())|tmp.getType().isInstance(new BigIntegerNode())){
+			        		 meta="{ \"id\": \""+k+"\", \"type\": \"Integer\"}";
+			        	 }else if(tmp.getType().isInstance(new DoubleNode())){
+			        		 meta="{ \"id\": \""+k+"\", \"type\": \"Double\"}";
+			        	 }else if(tmp.getType().isInstance(new DecimalNode())){
+			        		 meta="{ \"id\": \""+k+"\", \"type\": \"Decimal\"}";
+			        	 }else if(tmp.getType().isInstance(new LongNode())){
+			        		 meta="{ \"id\": \""+k+"\", \"type\": \"Long\"}";
+			        	}
+			           	tmpmeta+=meta+",";			
+			        }
+		        	String fields=tmpmeta.substring(0, tmpmeta.lastIndexOf(","));
+		        	oneMetaField="["+fields+"]";
+		 //       	TextNode fieldsNode=new TextNode(oneMetaField);
+		 
+		        	String metaFields="\"fields\":"+oneMetaField;
+		        	String schema="\"schema\": {"+metaFields+"}";
+		        	
+		        	//TODO Path in meta file
+		        	String p="...";
+		        	String path="\"path\": \""+p+"\"";
+		        	String resource="\"resources\":[ {"+path+", "+schema+"}]";
+		        	//TODO generate the name        	
+		        	String name="\"name\": \" MetaData";
+		        	String finalMeta="{ "+name+", "+resource+"}"; 
+		        	System.out.println("the meta data looks like:");
+		        	System.out.println(finalMeta);      
+		        	return finalMeta;
+				}
+				
+				public String convertInputCsv(String dscontent) {
+				    String csvString="";
+					String firstRowCsv="";					
+					//in case to write the data in a file later, each row is saving here as a element in the list content
+					LinkedList<String> contentCsv = new LinkedList<String>();
+					
+					// read the input 
+					JsonParser parser = new JsonParser(dscontent);
+					
+					IArrayNode<IJsonNode>data= null;
+				    try {
+				    	data =(IArrayNode<IJsonNode>) parser.readValueAsTree();
+					} catch (JsonParseException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+			
+		           	//writing the content in csv format		        	
+		           	int i;
+		        	for (i=0;i<data.size();i++){
+		        		String row="";
+		        		ObjectNode tuple=(ObjectNode) data.get(i);
+		        		Iterator<Entry<String, IJsonNode>> oneTuple=tuple.iterator();
+		        		while(oneTuple.hasNext()){
+		        			String tmp=oneTuple.next().getValue().toString();
+		        			row+=tmp+"|";        		
+		        		}
+		        		contentCsv.add(row);
+		        		csvString+=row+"\n";
+		        	}
+	//	        	System.out.println("the csv data looks like:");
+	//	        	System.out.println("in String: "+csvString);
+					return csvString;
 			}
+			}
+
 		}
 	
 	
-	private class DataConverter{
-		
-		public String convertInput(String dscontent) {
-		    String csvString="";
-			String firstRowCsv="";
-			String oneMetaField="";
-			//in case to write the data in a file later, each row is saving here as a element in the list content
-			LinkedList<String> content = new LinkedList<String>();
-			
-			// write a meta data
-			JsonParser parser = new JsonParser(dscontent);
-			
-			IArrayNode<IJsonNode>data= null;
-		    try {
-		    	data =(IArrayNode<IJsonNode>) parser.readValueAsTree();
-			} catch (JsonParseException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-		    //check the types of input by first row
-		    ObjectNode da=(ObjectNode) data.get(0);		    
-        	Iterator<Entry<String, IJsonNode>> iterator=da.iterator();
-        	
-        	String meta="";
-        	String t="";
-        	while(iterator.hasNext()){
-        		Entry<String, IJsonNode> e=iterator.next();
-        		String k=e.getKey(); 
-        
-        		firstRowCsv+=k+"|";
-        	       		
-	        	 IJsonNode tmp=e.getValue();
-	        	 
-	        	 if (tmp.getType().isInstance(new TextNode())){
-	        		 meta="{ \"id\": \""+k+"\", \"type\": \"String\"}";
-	        	 }else if(tmp.getType().isInstance(new IntNode())|tmp.getType().isInstance(new BigIntegerNode())){
-	        		 meta="{ \"id\": \""+k+"\", \"type\": \"Integer\"}";
-	        	 }else if(tmp.getType().isInstance(new DoubleNode())){
-	        		 meta="{ \"id\": \""+k+"\", \"type\": \"Double\"}";
-	        	 }else if(tmp.getType().isInstance(new DecimalNode())){
-	        		 meta="{ \"id\": \""+k+"\", \"type\": \"Decimal\"}";
-	        	 }else if(tmp.getType().isInstance(new LongNode())){
-	        		 meta="{ \"id\": \""+k+"\", \"type\": \"Long\"}";
-	        	}
-	           	t+=meta+",";
-	    //     	 System.out.println(t);
-	        }
-        	String fields=t.substring(0, t.lastIndexOf(","));
-        	oneMetaField="["+fields+"]";
- //       	TextNode fieldsNode=new TextNode(oneMetaField);
- 
-        	String metaFields="\"fields\":"+oneMetaField;
-        	String schema="\"schema\": {"+metaFields+"}";
-        	//TODO Path in meta file
-        	String p="...";
-        	String path="\"path\": \""+p+"\"";
-        	String resource="\"resources\":[ {"+path+", "+schema+"}]";
-        	//TODO generate the name        	
-        	String name="\"name\": \""+ firstRowCsv+"\"";
-        	String finalMeta="{ "+name+", "+resource+"}"; 
-        	System.out.println("the meta data looks like:");
-        	System.out.println(finalMeta);          	           	
-        	/*
-        	 * {"name": "Population of selected countries",
-        	 *  "resources":[ {
-        	 * 					"path": "countrypops.csv",
-        	 * 					"schema": {
-        	 * 					TesxNode__>  "fields": [{ "id": "Year", "type": "string" },
-        	 * 						  			    	 { "id": "Country", "type": "string" },
-        	 * 						   			 { "id": "Population", "type": "number" }]
-        	 * 								}
-        	 *              } ]
-        	 * }
-        	 */
-        	
-        	content.add(firstRowCsv);
-           	csvString=firstRowCsv+"\n";  
-     
-        	//writing the content in csv format
-        	int i;
-        	for (i=0;i<data.size();i++){
-        		String row="";
-        		ObjectNode tuple=(ObjectNode) data.get(i);
-        		Iterator<Entry<String, IJsonNode>> oneTuple=tuple.iterator();
-        		while(oneTuple.hasNext()){
-        			String tmp=oneTuple.next().getValue().toString();
-        			row+=tmp+"|";        		
-        		}
-        		content.add(row);
-        		csvString+=row+"\n";
-        	}
-        	System.out.println("the csv data looks like:");
-        	System.out.println("in Array: "+content.toString());
-        	System.out.println("in String: "+csvString);
-			return csvString;
- 
-        	//TODO save all csv content into a array/list of String, then in BufferedWriter
-    	/*
-		try {
-			FileOutputStream outStream = new FileOutputStream("result.csv");
-			OutputStreamWriter wr = new OutputStreamWriter(outStream);
-		    BufferedWriter br = new BufferedWriter(wr);
-		    
-		    int j;
-	        for(j=0;j<content.size();j++){
-	        	  
-	            br.write(content.get(j));	            
-	        }
-		} catch (IOException  e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}*/
-		}
-	}
 	
 	@Override
 	public int hashCode() {
@@ -251,16 +333,16 @@ public class DataMarketImport  extends ElementaryOperator<DataMarketImport>{
 
 	@Override
 	public PactModule asPactModule(EvaluationContext context, SopremoRecordLayout layout) {
-		GenericDataSource<?> contract = new GenericDataSource<DataMarketInputFormat>(
-				DataMarketInputFormat.class, String.format("DataMarket %s", importDataString));
+		GenericDataSink contract = new GenericDataSink( //GenericDataSink
+		DataMarketOutputFormat.class, String.format("DataMarket %s", scriptNode.toString()));
 
-		final PactModule pactModule = new PactModule(0, 1);
+		final PactModule pactModule = new PactModule(1, 0);  //output,input
         SopremoUtil.setEvaluationContext(contract.getParameters(), context);
         SopremoUtil.setLayout(contract.getParameters(), layout);
-        contract.getParameters().setString(DM_URL_PARAMETER, importDataString);
+        
+        contract.getParameters().setString(DM_URL_PARAMETER, scriptNode.toString());
 
-
-		pactModule.getOutput(0).setInput(contract);
+        pactModule.getOutput(0).setInput(contract);      //?
 		return pactModule;
 	}
 
@@ -269,23 +351,10 @@ public class DataMarketImport  extends ElementaryOperator<DataMarketImport>{
 	public void setImportParameter(EvaluationExpression value) {
 		if (value == null)
 			throw new NullPointerException("value expression must not be null");
-		/*
-		 *e.g. data income:[{"Country":"Germany","Year":2011,"GDP":81751602.50},
-		 *                 {"Country":"Germany","Year":2012,"GDP":80327900},
-		 *                 {"Country":"Germany","Year":2012,"GDP":80523746.001}
-		 *                 ]
-		 *converted meta-data: { "name": "Country;GDP;Year;", 
-		 *						"resources":[ {"path": "...", 
-		 *									   "schema": {"fields":[
-		 *														{ "id": "Country", "type": "String"},
-		 *														{ "id": "GDP", "type": "Decimal"},
-		 *														{ "id": "Year", "type": "Integer"}]}
-		 *							}]}
-		 */
-		importDataNode = value.evaluate(NullNode.getInstance());
+		
+		scriptNode = value.evaluate(NullNode.getInstance());	
+		scriptString=scriptNode.toString();
 
-		DataConverter dc = new DataConverter ();
-		importDataString=dc.convertInput(importDataNode.toString());
 	}
 
 	@Property(preferred = false)
