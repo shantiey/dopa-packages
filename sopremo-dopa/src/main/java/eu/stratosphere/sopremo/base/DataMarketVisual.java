@@ -179,15 +179,8 @@ public class DataMarketVisual extends ElementaryOperator<DataMarketVisual> {
 
 		protected static ArrayNode<IJsonNode> convertDataMarketResponse(
 				String jsonString) {
-			// remove Data Market API call around content
-			Pattern pattern = Pattern.compile(
-					"jsonDataMarketApi\\(\\[(.+)\\]\\)", Pattern.DOTALL);
-			Matcher matcher = pattern.matcher(jsonString);
-			if (!matcher.find()) {
-				return null;
-			}
-			String jsoncontent = matcher.group(1);
-			JsonParser parser = new JsonParser(jsoncontent);
+	
+			JsonParser parser = new JsonParser(jsonString);
 //			System.out.println("JSONCONTENT");
 //			System.out.println(jsoncontent);
 			// send Json content to parser
@@ -198,41 +191,10 @@ public class DataMarketVisual extends ElementaryOperator<DataMarketVisual> {
 				return null;
 			}
 
-			// getting the columns of file at first
-			// to read data following the given hierarchy in Data-market files
-			String[] dimensions;
-			@SuppressWarnings("unchecked")
-			IArrayNode<IObjectNode> columns = (IArrayNode<IObjectNode>) obj
-					.get("columns");
-			dimensions = new String[columns.size()];
-			for (int i = 0; i < columns.size(); i++) {
-				IObjectNode subcolumn = columns.get(i);
-				IJsonNode column = subcolumn.get("title");
-				String titel = column.toString();
-				dimensions[i] = titel;
-			}
-
 			// array for the converted data items
 			ArrayNode<IJsonNode> finalJsonArr = new ArrayNode<IJsonNode>();
+			finalJsonArr.copyValueFrom(obj);
 
-			// fill target array with the values from the "data" array
-			@SuppressWarnings("unchecked")
-			IArrayNode<IArrayNode<IJsonNode>> data = (IArrayNode<IArrayNode<IJsonNode>>) obj
-					.get("data");
-			for (int j = 0; j < data.size(); j++) {
-				IArrayNode<IJsonNode> subDataArray = data.get(j);
-
-				IObjectNode extractedObj = new ObjectNode();
-				for (int n = 0; n < subDataArray.size(); n++) {
-					if (dimensions[n].equals("Date")) {
-						extractedObj.put(dimensions[n],
-								handleDateForDatamarket(subDataArray.get(n)));
-					} else {
-						extractedObj.put(dimensions[n], subDataArray.get(n));
-					}
-				}
-				finalJsonArr.add(extractedObj);
-			}
 			return finalJsonArr;
 		}
 
@@ -291,9 +253,6 @@ public class DataMarketVisual extends ElementaryOperator<DataMarketVisual> {
 	}
 
 
-
-
-
    protected static class DatasetParserVis {
 
 	private Map<String,IArrayNode<IJsonNode>> dimensions = new HashMap<String,IArrayNode<IJsonNode>> ();
@@ -325,7 +284,8 @@ public class DataMarketVisual extends ElementaryOperator<DataMarketVisual> {
 		        	Entry<String, IJsonNode> e=iterator.next();
 		           	TextNode eachDim=(TextNode)checkDimensionSlice(ds_id,e.getKey(),e.getValue());
 
-		  	    	di+=eachDim+"-";	    	//   System.out.println(di);   //e4s-7a-e4t-5- instead of e4s=7a:e4t=5:
+		  	    	di+=eachDim+"-";	    	
+		  	    	//   System.out.println(di);   //e4s-7a-e4t-5- instead of e4s=7a:e4t=5:
 		   	    	one_ds_id+="-"+di.substring(0, di.lastIndexOf("-"));
 		       	}
 	        }

@@ -1,11 +1,12 @@
 
 package eu.stratosphere.sopremo.base;
 
+import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
@@ -14,7 +15,6 @@ import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
-import java.net.ContentHandlerFactory;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLConnection;
@@ -29,34 +29,23 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map.Entry;
 
-import javax.net.ssl.SSLHandshakeException;
-
-import org.apache.commons.httpclient.HttpClient;
-import org.apache.commons.httpclient.methods.PostMethod;
-import org.apache.commons.httpclient.methods.multipart.FilePart;
-import org.apache.commons.httpclient.methods.multipart.MultipartRequestEntity;
-import org.apache.commons.httpclient.methods.multipart.Part;
-import org.apache.commons.httpclient.util.HttpURLConnection;
 import org.apache.commons.io.IOUtils;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
-import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpPost;
-import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.http.conn.ssl.SSLContextBuilder;
-import org.apache.http.conn.ssl.SSLSocketFactory;
-import org.apache.http.conn.ssl.TrustSelfSignedStrategy;
 import org.apache.http.conn.ssl.TrustStrategy;
-import org.apache.http.entity.FileEntity;
-
-
+import org.apache.http.entity.mime.HttpMultipartMode;
+import org.apache.http.entity.mime.MultipartEntity;
+import org.apache.http.entity.mime.MultipartEntityBuilder;
+import org.apache.http.entity.mime.content.FileBody;
 import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.message.BasicNameValuePair;
+
 import eu.stratosphere.sopremo.io.JsonParseException;
 import eu.stratosphere.sopremo.io.JsonParser;
 import eu.stratosphere.sopremo.type.BigIntegerNode;
@@ -192,8 +181,9 @@ public class DataMarketImportBeta {
 	
 	
 	public static void postData0(String apiKey, String meta, String csv)  {
-		HttpPost httppost = new HttpPost("https://datamarket.com/import/job/");
-		httppost.addHeader("X-DataMarket-Secret-Key", apiKey);
+//		HttpPost httppost = new HttpPost("https://datamarket.com/import/job/");
+		HttpPost httppost = new HttpPost("https://datamarket.com/lod/datasets/ds-id/view[.json]/");
+		
 		
 		// add the cintent to a file, which is allowed to approach DM
 		List<BasicNameValuePair> parameters = new ArrayList<BasicNameValuePair>();
@@ -261,96 +251,6 @@ public class DataMarketImportBeta {
 	        
 	  }
 	
-	public static void postFile(String apiKey, String content, String fileName, String fileType)  {
-		HttpPost httppost = new HttpPost("https://datamarket.com/import/job/");
-		httppost.addHeader("X-DataMarket-Secret-Key", apiKey);
-		
-		// add the content to a file, which is allowed to approach DM
-		File file = null ;
-		try {
-		    // Create temp file.
-			file = File.createTempFile(fileName, fileType);   //".json"
-
-		    // Delete temp file when program exits.
-			file.deleteOnExit();
-		    // Write to temp file
-		    BufferedWriter out = new BufferedWriter(new FileWriter(file));
-		    out.write(content);
-		    out.close();
-		} catch (IOException e) {
-		}
-		   
-    //SSL decode
-	    SSLContextBuilder builder = new SSLContextBuilder();
-	    try {
-			builder.loadTrustMaterial(null, new TrustStrategy() {				
-				@Override
-				public boolean isTrusted(X509Certificate[] chain, String authType)
-						throws CertificateException {
-					// TODO Auto-generated method stub
-					return true;
-				}
-			});
-		} catch (NoSuchAlgorithmException e1) {
-			e1.printStackTrace();
-		} catch (KeyStoreException e1) {
-			
-			e1.printStackTrace();
-		}
-	    
-	    SSLConnectionSocketFactory fac; 	     
-		try {
-			fac = new SSLConnectionSocketFactory(builder.build());
-			CloseableHttpClient client = HttpClients.custom().setSSLSocketFactory(fac).build();
-		    httppost.setEntity(new FileEntity(file, "text/json, application/json"));
-			//	    CloseableHttpResponse response = client.execute(httppost);					
-		    HttpResponse httpResponse = client.execute(httppost);
-			HttpEntity resEntity = httpResponse.getEntity();
-					 				 							
-			// Get the HTTP Status Code					  
-			int status = httpResponse.getStatusLine().getStatusCode();					    
-			System.out.println("HTTP Status : "+status);				    
-					    
-			// Get the contents of the response					    
-			InputStream input;									
-			input = resEntity.getContent();		
-			String responseBody = IOUtils.toString(input);					    
-			input.close();
-					 
-			// Print the response code and message body					    
-			System.out.println(responseBody);
-					    
-				
-		} catch (UnsupportedEncodingException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				
-		}catch (IllegalStateException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				
-		} catch (IOException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				
-		}catch (KeyManagementException e1) {
-					// TODO Auto-generated catch block
-					e1.printStackTrace();
-				
-		} catch (NoSuchAlgorithmException e1) {
-					// TODO Auto-generated catch block
-					e1.printStackTrace();
-				
-		}
-			 
-/*			HttpURLConnection httpConnection = (HttpURLConnection)url.openConnection();
-   			httpConnection.setRequestMethod("POST");
- 			PostMethod filePost = new PostMethod("https://datamarket.com/import/job/");
-			Part[] parts = { new FilePart("file", file) };
-			filePost.setRequestEntity(new MultipartRequestEntity(parts,filePost.getParams()));			
-			HttpClient c =(HttpClient) client.getConnectionManager();
- */        
-	  }
 	
 	
 	@SuppressWarnings({ "unchecked" })	
@@ -470,7 +370,7 @@ public class DataMarketImportBeta {
         
 	 }	
 	
-	
+
 	public static String convertInputCsv(String dscontent) {
 	    String csvString="";
 		String firstRowCsv="";					
@@ -503,21 +403,174 @@ public class DataMarketImportBeta {
     	}
     	System.out.println("the csv data looks like:");
     	System.out.println("in Array: "+contentCsv.toString());
-    	System.out.println("in String: "+csvString);
+   
 		return csvString;
 }
+	
+	
+	public static void postFile(String apiKey, String jsonContent, String csvContent)  {
+		HttpPost httppost = new HttpPost("https://datamarket.com/import/job/");
+		httppost.addHeader("X-DataMarket-Secret-Key", apiKey);
+		
+		// add the content to a file, which is allowed to approach DM
+		File fileJson=writeInFiles(".json", jsonContent);
+		File fileCsv=writeInFiles(".csv", csvContent);
+		
+		System.out.println("check up a tmperary file by the datatype "+fileJson.toString());
+   
+		   //SSL decode
+	    SSLContextBuilder builder = new SSLContextBuilder();
+	    try {
+			builder.loadTrustMaterial(null, new TrustStrategy() {				
+				@Override
+				public boolean isTrusted(X509Certificate[] chain, String authType)
+						throws CertificateException {
+					// TODO Auto-generated method stub
+					return true;
+				}
+			});
+		} catch (NoSuchAlgorithmException e1) {
+			e1.printStackTrace();
+		} catch (KeyStoreException e1) {
+			
+			e1.printStackTrace();
+		}
+	    
+	    SSLConnectionSocketFactory fac; 	     
+		
+	    try {
+			fac = new SSLConnectionSocketFactory(builder.build());
+			CloseableHttpClient client = HttpClients.custom().setSSLSocketFactory(fac).build();
+			
+	//		FileEntity fileEntity=new FileEntity(file, "text/json, application/json");
+			FileBody fb0=new FileBody(fileJson);	
+			FileBody fb1=new FileBody(fileCsv);
+			MultipartEntityBuilder multipartEntity = MultipartEntityBuilder.create();        
+		    multipartEntity.setMode(HttpMultipartMode.BROWSER_COMPATIBLE);
+			
+//		    multipartEntity.addBinaryBody("datapackage.json", fileJson);
+		    multipartEntity.addPart("datapackage.json", fb0); //<input type="file" name="datapackage.json"/>  
+//		    multipartEntity.addPart("countrypops.csv", fb1);
+		    
+		    httppost.setEntity(multipartEntity.build());
+			
+			HttpResponse httpResponse = client.execute(httppost);
+			
+			System.out.println("->>>>>>>>>>>"  + httppost.containsHeader("X-DataMarket-Secret-Key"));
+			System.out.println("->>>>>>>>>>>"  + httppost.getEntity().getContentType());
+			System.out.println("->>>>>>>>>>>"  + httppost);
+		    System.out.println("##########" + httpResponse.toString());
+			
+		    HttpEntity resEntity = httpResponse.getEntity();
+					 				 							
+			// Get the HTTP Status Code					  
+			int status = httpResponse.getStatusLine().getStatusCode();					    
+			System.out.println("HTTP Status : "+status);				    
+					    
+			// Get the contents of the response					    
+			InputStream input;									
+			input = resEntity.getContent();		
+			String responseBody = IOUtils.toString(input);					    
+			input.close();
+					 
+			// Print the response code and message body					    
+			System.out.println(responseBody);
+					    				
+		} catch (UnsupportedEncodingException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				
+		}catch (IllegalStateException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				
+		} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				
+		}catch (KeyManagementException e1) {
+					// TODO Auto-generated catch block
+					e1.printStackTrace();
+				
+		} catch (NoSuchAlgorithmException e1) {
+					// TODO Auto-generated catch block
+					e1.printStackTrace();
+				
+		}			         
+	  }	
+	
+	public static File writeInFiles(String type, String content){
+		File file = null ;		
+			try  {
+				//create a temporary file
+				if (type.contains(".json")){				
+					file = File.createTempFile("tmpJsonMeta", ".json");				
+				}else if (type.contains(".csv")){
+					file = File.createTempFile("tmpCsv", ".csv");
+				}else{
+					System.out.println("Please entert a file type of json/csv.");
+				}
+				FileOutputStream fop = new FileOutputStream(file);
+				// get the content in bytes
+				byte[] contentInBytes = content.getBytes();
+	 
+				fop.write(contentInBytes);
+				fop.flush();
+				fop.close();
+	 
+				System.out.println("A"+type+"file has been Done.");
+	 
+			} catch (IOException e) {
+				e.printStackTrace();
+			}	
+		return file;
+	}
 
+	public static File writeLocalFile(String type, String content){
+		File file = null ;
+		if (type.contains(".json")){	
+			file = new File("c:/jtest/newfile.json");
+		}else if (type.equals(".csv")){
+			file = new File("c:/jtest/newfile.csv");
+	//			file = File.createTempFile("countrypops.csv", type);   //".csv"	
+		}else{
+			System.out.println("Please entert a file type of json/csv.");
+		}		
+			try (FileOutputStream fop = new FileOutputStream(file)) {
+				 
+				// if file doesn't exists, then create it
+				if (!file.exists()) {
+					file.createNewFile();
+				}
+	 
+				// get the content in bytes
+				byte[] contentInBytes = content.getBytes();
+	 
+				fop.write(contentInBytes);
+				fop.flush();
+				fop.close();
+	 
+				System.out.println("Done");
+	 
+			} catch (IOException e) {
+				e.printStackTrace();
+			}	
+			System.out.println(file.exists());
+		return file;
+	}
 	 
 	 public static void main(String[] args) throws ClientProtocolException, IOException, KeyManagementException, NoSuchAlgorithmException, KeyStoreException{ 
 	       
-	//	 testing convert data	 
-		 System.out.println("Incoming data: "+test); 
-//		 System.out.println("converting data ... "); 
-	        
+	//	 testing convert data	 	
+//		 System.out.println("converting data ... "); 	        
 //		 convertInputCsv(test);	 
-	        
-
+		 
+		 System.out.println("Incoming data: "+test); 
+//	     writeLocalFile(".csv",test);  
 //	   postData0(myAccess,testNodeType,"a,b,c");
-	   postFile(myAccess,testNodeType,"datapackage",".json");
+//	   postFile(myAccess,test,".json");
+		 
+		 String [] m=test.split("},");
+		 System.out.println(m[2]); 
 	    } 
 }
