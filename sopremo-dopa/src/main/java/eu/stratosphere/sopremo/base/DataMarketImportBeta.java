@@ -18,6 +18,8 @@ import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLConnection;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.security.KeyManagementException;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
@@ -443,17 +445,20 @@ public class DataMarketImportBeta {
 			CloseableHttpClient client = HttpClients.custom().setSSLSocketFactory(fac).build();
 			
 	//		FileEntity fileEntity=new FileEntity(file, "text/json, application/json");
-			FileBody fb0=new FileBody(fileJson);	
+			// String path = fileJson.getParent();
+			// path+File.pathSeparator+"datapackage.json"
+			// FileBody fb0=new FileBody(fileJson);	
+			FileBody fb0=new FileBody(new File("C:/Users/shan/datapackage.json"));
 			FileBody fb1=new FileBody(fileCsv);
 			MultipartEntityBuilder multipartEntity = MultipartEntityBuilder.create();        
 		    multipartEntity.setMode(HttpMultipartMode.BROWSER_COMPATIBLE);
-			
-//		    multipartEntity.addBinaryBody("datapackage.json", fileJson);
+		    
+//		    multipartEntity.addBinaryBody("datapackage.json", fileJson);;
 		    multipartEntity.addPart("datapackage.json", fb0); //<input type="file" name="datapackage.json"/>  
 //		    multipartEntity.addPart("countrypops.csv", fb1);
 		    
 		    httppost.setEntity(multipartEntity.build());
-			
+		    			
 			HttpResponse httpResponse = client.execute(httppost);
 			
 			System.out.println("->>>>>>>>>>>"  + httppost.containsHeader("X-DataMarket-Secret-Key"));
@@ -568,9 +573,9 @@ public class DataMarketImportBeta {
 		 System.out.println("Incoming data: "+test); 
 //	     writeLocalFile(".csv",test);  
 //	   postData0(myAccess,testNodeType,"a,b,c");
-//	   postFile(myAccess,test,".json");
+	   postFile(myAccess,test,".json");
 		 
-		 String [] m=test.split("},");
-		 System.out.println(m[2]); 
+//		 String [] m=test.split("},");
+//		 System.out.println(m[2]); 
 	    } 
 }

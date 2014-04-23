@@ -197,8 +197,12 @@ public class DataMarketImport  extends ElementaryOperator<DataMarketImport>{
 					fac = new SSLConnectionSocketFactory(builder.build());
 					CloseableHttpClient client = HttpClients.custom().setSSLSocketFactory(fac).build();
 					
-			//		FileEntity fileEntity=new FileEntity(file, "text/json, application/json");
-					FileBody fb0=new FileBody(fileJson, ContentType.APPLICATION_JSON );	
+			/**  //TODO
+			 * datamarket accept only the files, which is as datapackage.json or countrypops.csv named
+			 * each file has to be renamed before getting into a Filebody,
+			 * it's the decision how to handle temporary files and their paths in between
+			 */
+					FileBody fb0=new FileBody(fileJson);	
 					FileBody fb1=new FileBody(fileCsv);
 					MultipartEntityBuilder multipartEntity = MultipartEntityBuilder.create();        
 				    multipartEntity.setMode(HttpMultipartMode.BROWSER_COMPATIBLE);
@@ -417,8 +421,6 @@ public class DataMarketImport  extends ElementaryOperator<DataMarketImport>{
 			throw new NullPointerException("value expression must not be null");
 		IJsonNode node = value.evaluate(NullNode.getInstance());
 		dmApiKeyString = node.toString();
-	}
-
-   
+	}   
 
 }
