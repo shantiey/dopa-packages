@@ -198,7 +198,7 @@ public class DataMarketImport  extends ElementaryOperator<DataMarketImport>{
 					CloseableHttpClient client = HttpClients.custom().setSSLSocketFactory(fac).build();
 					
 			/**  //TODO
-			 * datamarket accept only the files, which is as datapackage.json or countrypops.csv named
+			 * datamarket accepts only files, which are named as datapackage.json or countrypops.csv 
 			 * each file has to be renamed before getting into a Filebody,
 			 * it's the decision how to handle temporary files and their paths in between
 			 */
