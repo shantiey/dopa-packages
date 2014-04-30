@@ -16,9 +16,12 @@ Visualisation API:
 
                                set-id(datasets)  dim-id  val-id
                                      |            |      |
+                                     |            |      |
 https://datamarket.com/lod/datasets/17tm/view/ds-kqc-t.3.12.s.j
                                                 |       |
-				           separate    separate
+                                                |       |
+				          separate    separate
 					  dimval-part  val-id 
 
+                  
                   the response is a html page
