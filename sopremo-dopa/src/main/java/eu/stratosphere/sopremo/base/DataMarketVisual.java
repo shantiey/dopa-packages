@@ -23,18 +23,33 @@ import eu.stratosphere.sopremo.type.*;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URL;
+import java.security.NoSuchAlgorithmException;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import org.apache.commons.io.IOUtils;
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
+import org.apache.http.conn.ssl.SSLContextBuilder;
+import org.apache.http.conn.ssl.TrustStrategy;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClients;
 
 @Name(verb = "datamarketaccess")
 @InputCardinality(0)
@@ -42,14 +57,11 @@ public class DataMarketVisual extends ElementaryOperator<DataMarketVisual> {
 
     protected static final String DM_URL_PARAMETER = "ser_dm_url_parameter";
     protected static final String DM_API_KEY_PARAMETER = "ser_api_key_parameter";
-    protected static final String DM_MIN_DATE = "ser_dm_mindate";
-    protected static final String DM_MAX_DATE = "ser_dm_maxdate";
 
-    private IJsonNode urlParameterNode = null;
-    private String  urlParameterNodeString=null;
-    private String dmApiKeyString = null;
-    private String mindate = null;
-    private String maxdate = null;
+    private static IJsonNode urlParameterNode = null;
+    private static String  urlParameterNodeString=null;
+    private static String dmApiKeyString = null;
+ 
 
 	public static class DataMarketInputFormat implements InputFormat<SopremoRecord, GenericInputSplit> {
 
@@ -59,20 +71,14 @@ public class DataMarketVisual extends ElementaryOperator<DataMarketVisual> {
 
         private String apiKey;
 
-        private String minDate;
-
-        private String maxDate;
-
-		private Iterator<IJsonNode> nodeIterator;
+       	private Iterator<IJsonNode> nodeIterator;
 
 		@Override
 		public void configure(Configuration parameters) {
 			this.context = SopremoUtil.getEvaluationContext(parameters);
             SopremoEnvironment.getInstance().setEvaluationContext(context);
 			urlParameter = parameters.getString(DM_URL_PARAMETER, null);
-			apiKey = parameters.getString(DM_API_KEY_PARAMETER, null);
-            minDate = parameters.getString(DM_MIN_DATE, null);
-            maxDate = parameters.getString(DM_MAX_DATE, null);
+			           
 		}
 
 		/*
@@ -92,40 +98,6 @@ public class DataMarketVisual extends ElementaryOperator<DataMarketVisual> {
 		}
 
 		
-		private String fetchDataMarketResponseVis(String urlParameter, String apiKey) {
-			// fetch data from URL
-			BufferedReader reader = null;
-			String result = "";
-			try {
-				String urlstring = "https://datamarket.com/lod/datasets/ds-id/view[.json]/" + urlParameter;
-				if (apiKey != null) {
-					urlstring += "&secret_key=" + apiKey;
-				}if (minDate != null) {
-                    urlstring += "&mindate=" + minDate;
-                }
-                if (maxDate != null) {
-                    urlstring += "&maxdate=" + maxDate;
-                }
-				URL url = new URL(urlstring);
-				
-				reader = new BufferedReader(new InputStreamReader(
-						url.openStream()));
-				StringBuffer buffer = new StringBuffer();
-				int read;
-				char[] chars = new char[1024];
-				while ((read = reader.read(chars)) != -1) {
-					buffer.append(chars, 0, read);
-				}
-				result = buffer.toString();
-//				System.out.println("Answer from DM:");
-//				System.out.println(result);
-			} catch (Exception e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-			return result;
-		}
-
 		/*
 		 * (non-Javadoc)
 		 *
@@ -149,10 +121,11 @@ public class DataMarketVisual extends ElementaryOperator<DataMarketVisual> {
 		@Override
 		public void open(final GenericInputSplit split) throws IOException {
 			if (split.getSplitNumber() == 0) {
-				String response = fetchDataMarketResponseVis(this.urlParameter, apiKey);
-				// convert record format
-				ArrayNode<IJsonNode> records = convertDataMarketResponse(response);
-
+				List<String> response = showDataMarketResponse(this.urlParameter);
+				
+				// the visualization url is currently set as output 
+				ArrayNode<IJsonNode> records = (ArrayNode<IJsonNode>) response.iterator();
+				
 				this.nodeIterator = records.iterator();
 			} else {
 				this.nodeIterator = null;
@@ -176,204 +149,203 @@ public class DataMarketVisual extends ElementaryOperator<DataMarketVisual> {
             record.setNode(value);
             return true;
         }
-
-		protected static ArrayNode<IJsonNode> convertDataMarketResponse(
-				String jsonString) {
-	
-			JsonParser parser = new JsonParser(jsonString);
-//			System.out.println("JSONCONTENT");
-//			System.out.println(jsoncontent);
-			// send Json content to parser
-			IObjectNode obj;
-			try {
-				obj = (IObjectNode) parser.readValueAsTree();
-			} catch (JsonParseException e) {
-				return null;
-			}
-
-			// array for the converted data items
-			ArrayNode<IJsonNode> finalJsonArr = new ArrayNode<IJsonNode>();
-			finalJsonArr.copyValueFrom(obj);
-
-			return finalJsonArr;
-		}
-
-		private static TextNode handleDateForDatamarket(IJsonNode timeIn) {
-			DateFormat formatter = new SimpleDateFormat("yyyy-MM-dd");
-			Date date;
-			SimpleDateFormat f = new SimpleDateFormat("dd-MMM-yyyy");
-			;
-			String time = "";
-			try {
-				date = (Date) formatter.parse(timeIn.toString());
-				time = f.format(date).intern();
-
-			} catch (ParseException e1) {
-				System.out.println("Exception :" + e1);
-				System.out
-						.println("Exception : Given Text does not fit our Date-Format.");
-			}
-			return new TextNode(time);
-		}
-
+        
         @Override
-        public void close() throws IOException {
-            // TODO Auto-generated method stub
-        }
-	}
+    	public void close() throws IOException {
+    		// TODO Auto-generated method stub
+    		
+    	}
+        /**
+         * Transform a ds_part into a url for visualization and send the request
+         * as response is a HTML page for each set-part
+         * @param ds_part
+         * @return resultUrls
+         */
+        private static List<String> showDataMarketResponse(String ds_part) {
+        	List<String> resultUrls = null;
+    		// switch the request url for visualization
+    	    // the incoming data sets are familiar with: 17tm!kqc-3.t.12.s/12rb!e4s-7a-e4t-5
+    		String[] ds=ds_part.split("/");
+    		
+    		for(String aDS : ds){
+    			System.out.println("Showing figures for a set-part: "+aDS);
+    			String ds_id=aDS.substring(0, aDS.indexOf("!"));  
+    			String dim_part=aDS.substring(aDS.indexOf("!")+1);
+    		if (dim_part.isEmpty()){
+    			System.out.println("The dataset for Visualization-API has to include a data slice specification.");
+    		}else{
+    		try {
+    			String urlstring = "https://datamarket.com/lod/datasets/"+ds_id+"/view/ds-"+dim_part;
+    			resultUrls.add(urlstring);
+    			System.out.println("Please review the figure with the url below : ");
+    			System.out.println("                                             "+urlstring);
+    			
+    			HttpPost httppost = new HttpPost(urlstring);
+    						
+    			SSLContextBuilder builder = new SSLContextBuilder();
+    			builder.loadTrustMaterial(null, new TrustStrategy() {				
+    				@Override
+    				public boolean isTrusted(X509Certificate[] chain, String authType)
+    						throws CertificateException {
+    					// TODO Auto-generated method stub
+    					return true;
+    				}
+    			});
+    			SSLConnectionSocketFactory fac= new SSLConnectionSocketFactory(builder.build());
+    			CloseableHttpClient client = HttpClients.custom().setSSLSocketFactory(fac).build();
 
-	/**
-	 * CURRENTLY UNUSED! This type needs to be registered with Nephele...
-	 * registration order is important, so this needs to be done during
-	 * initialization of nephele in a reproducible order!
-	 *
-	 * Input split for DataMarketAccessInputFormat. In addition to the number
-	 * the split also contains the actual data, that each split should return.
-	 * This way, the dm web API is only queried once and we still can distribute
-	 * the result across the required number of nodes.
-	 *
-	 * @author mleich
-	 */
-	public static class DataMarketInputSplit extends GenericInputSplit {
+    			HttpResponse httpResponse = client.execute(httppost);
+    			
+    			
+    			HttpEntity resEntity = httpResponse.getEntity();				
+    			// Get the HTTP Status Code					  
+    			int status = httpResponse.getStatusLine().getStatusCode();					    
+    			System.out.println("HTTP Status : "+status);				    
+    					    
+    			// Get the contents of the response					    
+    			InputStream input;									
+    			input = resEntity.getContent();		
+    			String responseBody = IOUtils.toString(input);					    
+    			input.close();
+    					 
+    			// Print the response code and message body					    
+    			System.out.println("-->>>>>>>>"+responseBody);				
 
-		private IJsonNode[] records;
+    			//	System.out.println(result);
+    		}catch (NoSuchAlgorithmException e1) {
+    			e1.printStackTrace();
+    		} catch (Exception e) {
+    			// TODO Auto-generated catch block
+    			e.printStackTrace();
+    		}
+    	}	
+    		}
+    		return resultUrls;
+    	}
+    	
+    	
+    	protected static class DatasetParserVis {
 
-		public DataMarketInputSplit() {
-			super();
-		}
+    		private Map<String,IArrayNode<IJsonNode>> dimensions = new HashMap<String,IArrayNode<IJsonNode>> ();
+    				
+    	     public String parseDS(String dscontent) {
 
-		public DataMarketInputSplit(int number, IJsonNode[] records) {
-			super(number);
-			this.records = records;
-		}
+    			String finalDS="";
 
-		public IJsonNode[] getRecords() {
-			return records;
-		}
-	}
-
-
-   protected static class DatasetParserVis {
-
-	private Map<String,IArrayNode<IJsonNode>> dimensions = new HashMap<String,IArrayNode<IJsonNode>> ();
-
-     public String parseDS(String dscontent) {
-
-		String finalDS="";
-
-		// parse content from json file, multiple ds is allowed
-		JsonParser parser = new JsonParser(dscontent);
-		IArrayNode<IObjectNode>datasets = null;
-	    try {
-	    	datasets =(IArrayNode<IObjectNode>) parser.readValueAsTree();
-		} catch (JsonParseException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
-  	     //call each dataset like: 12rb!e4s=7a:e4t=5	 or 17tm!kqc=p
-	    for (int i = 0; i < datasets.size(); i++) {
-
-	    	String di="";
-
-	    	IJsonNode ds_id=datasets.get(i).get("ds_id");
-	    	String one_ds_id=ds_id.toString();
-	        if (!(datasets.get(i).get("dimension") instanceof MissingNode)) {
-	        	IObjectNode dimensions=(IObjectNode) datasets.get(i).get ("dimension");
-	        	Iterator<Entry<String, IJsonNode>> iterator=dimensions.iterator();
-		        while(iterator.hasNext()){
-		        	Entry<String, IJsonNode> e=iterator.next();
-		           	TextNode eachDim=(TextNode)checkDimensionSlice(ds_id,e.getKey(),e.getValue());
-
-		  	    	di+=eachDim+"-";	    	
-		  	    	//   System.out.println(di);   //e4s-7a-e4t-5- instead of e4s=7a:e4t=5:
-		   	    	one_ds_id+="-"+di.substring(0, di.lastIndexOf("-"));
-		       	}
-	        }
-
-	       	finalDS+=one_ds_id+"-";
-     }
-	  // set up the whole (multi-)dataset together
-	    finalDS=finalDS.substring(0, finalDS.lastIndexOf("-"));
-
-		return finalDS;
-	}
-	/*
-	 * Transfer each dimension under its ds_id
-	 * return a form for datamarket api
-	 * {e4s: 7a}   ==> e4s=7a
-	 */
-    public TextNode checkDimensionSlice(IJsonNode ds, String id, IJsonNode value) {
-    	 IArrayNode<IJsonNode> dimArray = dimensions.get (ds.toString());
-    	 TextNode  tmp = null;
-    	 if (dimArray == null) {
-    		 // fetch dimensions from DataMarket
-      		    BufferedReader reader = null;
-      		    String dsData="";
-      		    try {
-      	            URL url = new URL("http://datamarket.com/api/v1/info.json?ds="+ds.toString());
-      		        reader = new BufferedReader(new InputStreamReader(url.openStream()));
-      		        StringBuffer buffer = new StringBuffer();
-      		        int read;
-      		        char[] chars = new char[1024];
-
-      		        while ((read = reader.read(chars)) != -1)
-      		          buffer.append(chars, 0, read);
-      		          dsData=buffer.toString();
-
-      		    } catch (Exception e) {
-      				// TODO Auto-generated catch block
-      				e.printStackTrace();
-      			}
-
-    			// remove Data Market API call around content
-    			Pattern pattern = Pattern.compile("jsonDataMarketApi\\((.+)\\)", Pattern.DOTALL);
-    			Matcher matcher = pattern.matcher(dsData);
-    			if (!matcher.find()) {
-    				return null;
+    			// parse content from json file, multiple ds is allowed
+    			JsonParser parser = new JsonParser(dscontent);
+    			IArrayNode<IObjectNode>datasets = null;
+    		    try {
+    		    	datasets =(IArrayNode<IObjectNode>) parser.readValueAsTree();
+    			} catch (JsonParseException e) {
+    				// TODO Auto-generated catch block
+    				e.printStackTrace();
     			}
-    			String jsoncontent = matcher.group(1);
-    			JsonParser parser = new JsonParser(jsoncontent);
+    	  	     //call each dataset like: 12rb!e4s=7a:e4t=5	 or 17tm!kqc=p
+    		    for (int i = 0; i < datasets.size(); i++) {
 
-    	 		IArrayNode<IObjectNode> dims = null;
-      		try {
-      			dims =(IArrayNode<IObjectNode>) parser.readValueAsTree();
+    		    	String di="";
 
-      		} catch (JsonParseException e) {
-      			// TODO Auto-generated catch block
-      			e.printStackTrace();
-      		}
-      		//call each dimension values
-      	    //values|subValues::  [{id: 6a, title: Eastern Europe}, {id: 3e, iso3166: PT, title: Portugal},.....
-      		//subValues.get(0)::{id: 6a, title: Eastern Europe}
-      	    	dimArray =(IArrayNode<IJsonNode>) dims.get(0).get("dimensions");
-    		    this.dimensions.put(ds.toString(), dimArray);
-    	 }
+    		    	IJsonNode ds_id=datasets.get(i).get("ds_id");
+    		    	//the whole set-part of one category eg. 17tm!kqc-3.t.12.s (17tm!kqc=3.t.12.s)
+    		    	String one_ds_id=ds_id.toString();    
+    		        if (!(datasets.get(i).get("dimension") instanceof MissingNode)) {
+    		        	IObjectNode dimensions=(IObjectNode) datasets.get(i).get ("dimension");
+    		        	Iterator<Entry<String, IJsonNode>> iterator=dimensions.iterator();
+    			        while(iterator.hasNext()){
+    			        	Entry<String, IJsonNode> e=iterator.next();
+    			           	TextNode eachDim=(TextNode)checkDimensionSlice(ds_id,e.getKey(),e.getValue());
 
-     		for (int i = 0; i < dimArray.size(); i++) {
-     	    	IJsonNode d_id_key=((IObjectNode) dimArray.get(i)).get("id");
-     	    	IJsonNode d_id_value=((IObjectNode) dimArray.get(i)).get("title");
-     	    	IJsonNode values=((IObjectNode) dimArray.get(i)).get("values");
-     	    	IArrayNode<IJsonNode> valueArray=(IArrayNode<IJsonNode>)values;
+    			  	    	di+=eachDim+"-";	    	
+    			  	    	//   System.out.println(di);   //e4s-7a-e4t-5- instead of e4s=7a:e4t=5:
+    			   	    	one_ds_id+="!"+di.substring(0, di.lastIndexOf("-"));  //!e4s-7a-e4t-5
+    			       	}
+    		        }
+    		      
+    		       	finalDS+=one_ds_id+"/";     // 17tm!kqc-3.t.12.s/12rb!e4s-7a-e4t-5/
+    	     }
+    		  // set up the whole (multi-)dataset together
+    		    finalDS=finalDS.substring(0, finalDS.lastIndexOf("/"));
 
-     	    	if(id.equals(d_id_value.toString())){
-     	    		id= d_id_key.toString();
-     	    	}
-     	    	 for (int j = 0; j < valueArray.size(); j++) {
-     	    		 IJsonNode keyValue=((IObjectNode) valueArray.get(j)).get("id");
-     	    		 IJsonNode valueValue=((IObjectNode) valueArray.get(j)).get("title");
+    			return finalDS;
+    		}
+    		/**
+    		 * Transfer each dimension in its ds_id
+    		 * return a valid form for datamarket Visual API
+    		 * {e4s: 7a}   ==> e4s-7a
+    		 */
+    	    public TextNode checkDimensionSlice(IJsonNode ds, String id, IJsonNode value) {
+    	    	 IArrayNode<IJsonNode> dimArray = dimensions.get (ds.toString());
+    	    	 TextNode  tmp = null;
+    	    	 if (dimArray == null) {
+    	    		 // fetch dimensions from DataMarket
+    	      		    BufferedReader reader = null;
+    	      		    String dsData="";
+    	      		    try {
+    	      	            URL url = new URL("http://datamarket.com/api/v1/info.json?ds="+ds.toString());
+    	      		        reader = new BufferedReader(new InputStreamReader(url.openStream()));
+    	      		        StringBuffer buffer = new StringBuffer();
+    	      		        int read;
+    	      		        char[] chars = new char[1024];
 
-     	    		 if(value.equals(valueValue)){
-     	    			value=keyValue;
-     	    		 }
-     	    	//set one dimension
-    	        tmp=new TextNode(id+"-"+value.toString());
-     	    	 }
-     	   }
-     		return tmp;
-     	}
-}
+    	      		        while ((read = reader.read(chars)) != -1)
+    	      		          buffer.append(chars, 0, read);
+    	      		          dsData=buffer.toString();
 
+    	      		    } catch (Exception e) {
+    	      				// TODO Auto-generated catch block
+    	      				e.printStackTrace();
+    	      			}
 
+    	    			// remove Data Market API call around content
+    	    			Pattern pattern = Pattern.compile("jsonDataMarketApi\\((.+)\\)", Pattern.DOTALL);
+    	    			Matcher matcher = pattern.matcher(dsData);
+    	    			if (!matcher.find()) {
+    	    				return null;
+    	    			}
+    	    			String jsoncontent = matcher.group(1);
+    	    			JsonParser parser = new JsonParser(jsoncontent);
+
+    	    	 		IArrayNode<IObjectNode> dims = null;
+    	      		try {
+    	      			dims =(IArrayNode<IObjectNode>) parser.readValueAsTree();
+
+    	      		} catch (JsonParseException e) {
+    	      			// TODO Auto-generated catch block
+    	      			e.printStackTrace();
+    	      		}
+    	      		//call each dimension values
+    	      	    //values|subValues::  [{id: 6a, title: Eastern Europe}, {id: 3e, iso3166: PT, title: Portugal},.....
+    	      		//subValues.get(0)::{id: 6a, title: Eastern Europe}
+    	      	    	dimArray =(IArrayNode<IJsonNode>) dims.get(0).get("dimensions");
+    	    		    this.dimensions.put(ds.toString(), dimArray);
+    	    	 }
+
+    	     		for (int i = 0; i < dimArray.size(); i++) {
+    	     	    	IJsonNode d_id_key=((IObjectNode) dimArray.get(i)).get("id");
+    	     	    	IJsonNode d_id_value=((IObjectNode) dimArray.get(i)).get("title");
+    	     	    	IJsonNode values=((IObjectNode) dimArray.get(i)).get("values");
+    	     	    	IArrayNode<IJsonNode> valueArray=(IArrayNode<IJsonNode>)values;
+
+    	     	    	if(id.equals(d_id_value.toString())){
+    	     	    		id= d_id_key.toString();
+    	     	    	}
+    	     	    	 for (int j = 0; j < valueArray.size(); j++) {
+    	     	    		 IJsonNode keyValue=((IObjectNode) valueArray.get(j)).get("id");
+    	     	    		 IJsonNode valueValue=((IObjectNode) valueArray.get(j)).get("title");
+
+    	     	    		 if(value.equals(valueValue)){
+    	     	    			value=keyValue;
+    	     	    		 }
+    	     	    	//set one dimension
+    	    	        tmp=new TextNode(id+"-"+value.toString());
+    	     	    	 }
+    	     	   }
+    	     		return tmp;
+    	     	}
+    	}
+
+    	
 	@Override
 	public int hashCode() {
 		final int prime = 37;
@@ -382,7 +354,6 @@ public class DataMarketVisual extends ElementaryOperator<DataMarketVisual> {
 		return result;
 	}
 
-	@Override
 	public PactModule asPactModule(EvaluationContext context, SopremoRecordLayout layout) {
 		GenericDataSource<?> contract = new GenericDataSource<DataMarketInputFormat>(
 				DataMarketInputFormat.class, String.format("DataMarket %s", urlParameterNodeString));
@@ -391,9 +362,8 @@ public class DataMarketVisual extends ElementaryOperator<DataMarketVisual> {
         SopremoUtil.setEvaluationContext(contract.getParameters(), context);
         SopremoUtil.setLayout(contract.getParameters(), layout);
         contract.getParameters().setString(DM_URL_PARAMETER, urlParameterNodeString);
-        contract.getParameters().setString(DM_API_KEY_PARAMETER, dmApiKeyString);
-        contract.getParameters().setString(DM_MAX_DATE, maxdate);
-        contract.getParameters().setString(DM_MIN_DATE, mindate);
+        
+      
 		pactModule.getOutput(0).setInput(contract);
 		return pactModule;
 	}
@@ -408,35 +378,7 @@ public class DataMarketVisual extends ElementaryOperator<DataMarketVisual> {
 		DatasetParserVis ds = new DatasetParserVis();
 		urlParameterNodeString=ds.parseDS(urlParameterNode.toString());
 
-//		System.out.println("set urlParameter expression "
-//				+ urlParameterNode.toString());
 	}
-
-	@Property(preferred = false)
-	@Name(noun = "key")
-	public void setKeyParameter(EvaluationExpression value) {
-		if (value == null)
-			throw new NullPointerException("value expression must not be null");
-		IJsonNode node = value.evaluate(NullNode.getInstance());
-		dmApiKeyString = node.toString();
-	}
-
-    @Property(preferred = false)
-    @Name(noun = "mindate")
-    public void setMinDate(EvaluationExpression value) {
-        if (value == null)
-            throw new NullPointerException("value expression must not be null");
-        IJsonNode node = value.evaluate(NullNode.getInstance());
-        mindate = node.toString();
-    }
-
-    @Property(preferred = false)
-    @Name(noun = "maxdate")
-    public void setMaxDate(EvaluationExpression value) {
-        if (value == null)
-            throw new NullPointerException("value expression must not be null");
-        IJsonNode node = value.evaluate(NullNode.getInstance());
-        maxdate = node.toString();
-    }
-
+    	
+}
 }
