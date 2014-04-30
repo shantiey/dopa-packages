@@ -19,7 +19,7 @@ Visualisation API:
                                      |            |      |
 https://datamarket.com/lod/datasets/17tm/view/ds-kqc-t.3.12.s.j
 				                |          |
-				              separate    separate
+				                  separate
 				              dimval-part  val-id 
 
                   
